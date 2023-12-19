@@ -9,3 +9,9 @@ homepage = "https://ironfish.network/"
 repository = "https://github.com/iron-fish/ironfish-frost"
 
 [dependencies]
+ed25519-dalek = { version = "2.1.0", features = ["rand_core"] }
+rand_core = "0.6.4"
+x25519-dalek = { version = "2.0.0", features = ["static_secrets"] }
+
+[dev-dependencies]
+rand = "0.8.5"
