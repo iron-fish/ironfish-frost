@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use crate::frost;
 use ed25519_dalek::Signature;
 use ed25519_dalek::SignatureError;
 use ed25519_dalek::Signer;
@@ -127,6 +128,12 @@ impl Identity {
     }
 
     #[must_use]
+    pub fn to_frost_identifier(&self) -> frost::Identifier {
+        frost::Identifier::derive(&self.serialize())
+            .expect("deriving an identifier with FROST-RedJubJub should never fail")
+    }
+
+    #[must_use]
     pub fn serialize(&self) -> IdentitySerialization {
         let mut s = [0u8; IDENTITY_LEN];
         self.serialize_into(&mut s[..])
@@ -181,6 +188,20 @@ impl<'a> From<&'a Secret> for Identity {
     }
 }
 
+impl From<Identity> for frost::Identifier {
+    #[inline]
+    fn from(identity: Identity) -> frost::Identifier {
+        identity.to_frost_identifier()
+    }
+}
+
+impl<'a> From<&'a Identity> for frost::Identifier {
+    #[inline]
+    fn from(identity: &Identity) -> frost::Identifier {
+        identity.to_frost_identifier()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Identity;
@@ -228,5 +249,14 @@ mod tests {
                 i
             );
         }
+    }
+
+    #[test]
+    fn frost_identity() {
+        let secret = Secret::random(thread_rng());
+        let id = secret.to_identity();
+        let frost_id1 = id.to_frost_identifier();
+        let frost_id2 = id.to_frost_identifier();
+        assert_eq!(frost_id1, frost_id2);
     }
 }
