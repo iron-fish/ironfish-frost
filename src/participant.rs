@@ -68,6 +68,18 @@ impl Secret {
         }
     }
 
+    #[inline]
+    #[must_use]
+    pub fn signing_key(&self) -> &SigningKey {
+        &self.signing_key
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn decryption_key(&self) -> &StaticSecret {
+        &self.decryption_key
+    }
+
     #[must_use]
     pub fn to_identity(&self) -> Identity {
         self.identity
@@ -119,6 +131,18 @@ impl Identity {
             id.verify().expect("signature did not verify");
         }
         id
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn verification_key(&self) -> &VerifyingKey {
+        &self.verification_key
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn encryption_key(&self) -> &PublicKey {
+        &self.encryption_key
     }
 
     pub fn verify(&self) -> Result<(), SignatureError> {
