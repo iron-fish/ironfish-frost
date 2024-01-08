@@ -9,9 +9,9 @@ use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
 use ed25519_dalek::VerifyingKey;
+use once_cell::sync::OnceCell;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::cell::OnceCell;
 use std::io;
 use x25519_dalek::PublicKey;
 use x25519_dalek::StaticSecret;
@@ -178,13 +178,13 @@ impl Identity {
         let mut version = [0u8; VERSION_LEN];
         reader.read_exact(&mut version)?;
         if version != VERSION {
-            return Err(io::Error::other("unsupported serialization version number"));
+            return Err(io::Error::new(io::ErrorKind::Other, "unsupported serialization version number"));
         }
 
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
         let verification_key =
-            VerifyingKey::from_bytes(&verification_key).map_err(io::Error::other)?;
+            VerifyingKey::from_bytes(&verification_key).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -194,7 +194,7 @@ impl Identity {
         reader.read_exact(&mut signature)?;
         let signature = Signature::from(signature);
 
-        Self::new(verification_key, encryption_key, signature).map_err(io::Error::other)
+        Self::new(verification_key, encryption_key, signature).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 }
 
