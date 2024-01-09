@@ -5,4 +5,4 @@
 pub mod nonces;
 pub mod participant;
 
-use reddsa::frost::redjubjub as frost;
+pub use reddsa::frost::redjubjub as frost;
