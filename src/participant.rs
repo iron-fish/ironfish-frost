@@ -16,11 +16,19 @@ use std::io;
 use x25519_dalek::PublicKey;
 use x25519_dalek::StaticSecret;
 
+const VERSION_LEN: usize = 1;
+const VERSION: [u8; VERSION_LEN] = [0x72];
+
+const SIGNING_KEY_LEN: usize = ed25519_dalek::SECRET_KEY_LENGTH;
+const DECRYPTION_KEY_LEN: usize = 32;
+
+pub const SECRET_LEN: usize = VERSION_LEN + SIGNING_KEY_LEN + DECRYPTION_KEY_LEN;
+
+pub type SecretSerialization = [u8; SECRET_LEN];
+
 const VERIFICATION_KEY_LEN: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
 const ENCRYPTION_KEY_LEN: usize = 32;
 const SIGNATURE_LEN: usize = Signature::BYTE_SIZE;
-const VERSION_LEN: usize = 1;
-const VERSION: [u8; VERSION_LEN] = [0x72];
 
 pub const IDENTITY_LEN: usize =
     VERSION_LEN + VERIFICATION_KEY_LEN + ENCRYPTION_KEY_LEN + SIGNATURE_LEN;
@@ -92,6 +100,46 @@ impl Secret {
                 Identity::new_unchecked(verification_key, encryption_key, signature)
             })
             .clone()
+    }
+
+    #[must_use]
+    pub fn serialize(&self) -> SecretSerialization {
+        let mut s = [0u8; SECRET_LEN];
+        self.serialize_into(&mut s[..])
+            .expect("array too small to contain serialization");
+        s
+    }
+
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+        writer.write_all(&VERSION)?;
+        writer.write_all(self.signing_key.as_bytes())?;
+        writer.write_all(self.decryption_key.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        let mut version = [0u8; VERSION_LEN];
+        reader.read_exact(&mut version)?;
+        if version != VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "unsupported serialization version number",
+            ));
+        }
+
+        let mut signing_key = [0u8; SIGNING_KEY_LEN];
+        reader.read_exact(&mut signing_key)?;
+        let signing_key = SigningKey::from_bytes(&signing_key);
+
+        let mut decryption_key = [0u8; DECRYPTION_KEY_LEN];
+        reader.read_exact(&mut decryption_key)?;
+        let decryption_key = StaticSecret::from(decryption_key);
+
+        Ok(Self {
+            signing_key: signing_key,
+            decryption_key: decryption_key,
+            identity: OnceCell::new(),
+        })
     }
 }
 
@@ -178,13 +226,16 @@ impl Identity {
         let mut version = [0u8; VERSION_LEN];
         reader.read_exact(&mut version)?;
         if version != VERSION {
-            return Err(io::Error::new(io::ErrorKind::Other, "unsupported serialization version number"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "unsupported serialization version number",
+            ));
         }
 
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
-        let verification_key =
-            VerifyingKey::from_bytes(&verification_key).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        let verification_key = VerifyingKey::from_bytes(&verification_key)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -194,7 +245,8 @@ impl Identity {
         reader.read_exact(&mut signature)?;
         let signature = Signature::from(signature);
 
-        Self::new(verification_key, encryption_key, signature).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+        Self::new(verification_key, encryption_key, signature)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 }
 
@@ -237,6 +289,17 @@ mod tests {
         let secret = Secret::random(thread_rng());
         let id = secret.to_identity();
         id.verify().expect("verification failed");
+    }
+
+    #[test]
+    fn secret_deserialization() {
+        let secret = Secret::random(thread_rng());
+        let identity1 = secret.to_identity();
+        let serialization = secret.serialize();
+        let deserialized =
+            Secret::deserialize_from(&serialization[..]).expect("deserialization failed");
+        let identity2 = deserialized.to_identity();
+        assert_eq!(identity1, identity2);
     }
 
     #[test]
