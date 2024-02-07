@@ -12,6 +12,8 @@ use ed25519_dalek::VerifyingKey;
 use once_cell::sync::OnceCell;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::io;
 use x25519_dalek::PublicKey;
 use x25519_dalek::StaticSecret;
@@ -247,6 +249,13 @@ impl Identity {
 
         Self::new(verification_key, encryption_key, signature)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+    }
+}
+
+// Need to implement `Hash` manually because `Signature` does not implement it
+impl Hash for Identity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.serialize().hash(state);
     }
 }
 
