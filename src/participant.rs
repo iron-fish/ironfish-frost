@@ -138,8 +138,8 @@ impl Secret {
         let decryption_key = StaticSecret::from(decryption_key);
 
         Ok(Self {
-            signing_key: signing_key,
-            decryption_key: decryption_key,
+            signing_key,
+            decryption_key,
             identity: OnceCell::new(),
         })
     }
