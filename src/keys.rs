@@ -1,4 +1,5 @@
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
+use crate::frost::VerifyingKey;
 use crate::participant::Identity;
 use std::io;
 
@@ -11,6 +12,10 @@ pub struct PublicKeyPackage {
 impl PublicKeyPackage {
     pub fn identities(&self) -> &[Identity] {
         &self.identities[..]
+    }
+
+    pub fn verifying_key(&self) -> &VerifyingKey {
+        self.frost_public_key_package.verifying_key()
     }
 
     pub fn frost_public_key_package(&self) -> &FrostPublicKeyPackage {
