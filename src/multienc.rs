@@ -65,7 +65,7 @@ where
         .map(|id| {
             let recipient_key = id.borrow().encryption_key();
             let shared_secret = agreement_secret.diffie_hellman(recipient_key).to_bytes();
-            let mut cipher = ChaCha20::new((&shared_secret).into(), (&nonce).into());
+            let mut cipher = ChaCha20::new((&shared_secret).into(), &nonce);
             let mut encrypted_key = encryption_key;
 
             cipher.apply_keystream(&mut encrypted_key);
@@ -105,7 +105,7 @@ where
             // the encryption key was not for this participant (in which case, it will result in
             // random bytes).
             let mut encryption_key = *encrypted_key;
-            let mut cipher = ChaCha20::new((&shared_secret).into(), (&nonce).into());
+            let mut cipher = ChaCha20::new((&shared_secret).into(), &nonce);
             cipher.apply_keystream(&mut encryption_key);
 
             // Decrypt the data with ChaCha20Poly1305. This will fail if the encryption key was not
