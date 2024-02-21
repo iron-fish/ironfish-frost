@@ -10,6 +10,17 @@ pub struct PublicKeyPackage {
 }
 
 impl PublicKeyPackage {
+    #[must_use]
+    pub fn from_frost<I>(frost_public_key_package: FrostPublicKeyPackage, identities: I) -> Self
+    where
+        I: IntoIterator<Item = Identity>,
+    {
+        Self {
+            frost_public_key_package,
+            identities: identities.into_iter().collect(),
+        }
+    }
+
     pub fn identities(&self) -> &[Identity] {
         &self.identities[..]
     }
