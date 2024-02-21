@@ -237,7 +237,7 @@ impl Identity {
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
         let verification_key = VerifyingKey::from_bytes(&verification_key)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -248,7 +248,7 @@ impl Identity {
         let signature = Signature::from(signature);
 
         Self::new(verification_key, encryption_key, signature)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 
