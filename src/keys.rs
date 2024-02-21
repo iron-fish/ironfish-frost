@@ -57,3 +57,37 @@ impl PublicKeyPackage {
         })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::vec;
+
+    use crate::samples::frost_public_key_package;
+
+    use super::*;
+
+    #[test]
+    fn serde() {
+        let frost_public_key_package = frost_public_key_package();
+
+        let pkg = PublicKeyPackage {
+            frost_public_key_package,
+            identities: vec![],
+        };
+
+        let mut vec = vec![];
+        pkg.write(&mut vec).expect("correctly serialized");
+
+        let pkg2 = PublicKeyPackage::read(&vec[..]).expect("correctly deserialized");
+
+        assert_eq!(pkg.frost_public_key_package, pkg2.frost_public_key_package);
+
+        pkg.frost_public_key_package
+            .verifying_shares()
+            .iter()
+            .zip(pkg2.frost_public_key_package.verifying_shares().iter())
+            .for_each(|(v1, v2)| {
+                assert_eq!(v1, v2);
+            });
+    }
+}
