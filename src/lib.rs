@@ -6,5 +6,5 @@ pub mod keys;
 pub mod multienc;
 pub mod nonces;
 pub mod participant;
-
+pub mod signature_share;
 pub use reddsa::frost::redjubjub as frost;
