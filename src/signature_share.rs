@@ -32,6 +32,12 @@ impl SignatureShare {
         &self.frost_signature_share
     }
 
+    pub fn serialize(&self) -> io::Result<Vec<u8>> {
+        let mut s = Vec::new();
+        self.serialize_into(&mut s)?;
+        Ok(s)
+    }
+
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         let identity_bytes = self.identity.serialize();
         let signature_share_bytes = self.frost_signature_share.serialize();
