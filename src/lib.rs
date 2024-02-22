@@ -8,4 +8,5 @@ pub mod multienc;
 pub mod nonces;
 pub mod participant;
 pub mod signature_share;
+pub mod signing_commitment;
 pub use reddsa::frost::redjubjub as frost;

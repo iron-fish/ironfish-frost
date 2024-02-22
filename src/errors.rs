@@ -1,10 +1,12 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+use reddsa::frost::redjubjub::Error as FrostError;
 use std::backtrace::Backtrace;
 use std::backtrace::BacktraceStatus;
 use std::error::Error;
 use std::fmt;
+use std::io;
 
 #[derive(Debug)]
 pub struct IronfishError {
@@ -17,6 +19,8 @@ pub struct IronfishError {
 pub enum IronfishErrorKind {
     InvalidFrostIdentifier,
     InvalidFrostSignatureShare,
+    Io,
+    FrostLibError,
 }
 
 impl Error for IronfishError {}
@@ -54,5 +58,17 @@ impl IronfishError {
             source: Some(source.into()),
             backtrace: Backtrace::capture(),
         }
+    }
+}
+
+impl From<io::Error> for IronfishError {
+    fn from(e: io::Error) -> IronfishError {
+        IronfishError::new_with_source(IronfishErrorKind::Io, e)
+    }
+}
+
+impl From<FrostError> for IronfishError {
+    fn from(e: FrostError) -> IronfishError {
+        IronfishError::new_with_source(IronfishErrorKind::FrostLibError, e)
     }
 }
