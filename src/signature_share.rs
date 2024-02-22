@@ -17,7 +17,7 @@ pub struct SignatureShare {
 
 impl SignatureShare {
     #[must_use]
-    pub fn from_frost<I>(frost_signature_share: FrostSignatureShare, identity: Identity) -> Self {
+    pub fn from_frost(frost_signature_share: FrostSignatureShare, identity: Identity) -> Self {
         Self {
             frost_signature_share,
             identity,
