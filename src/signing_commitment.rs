@@ -32,6 +32,14 @@ impl SigningCommitment {
         }
     }
 
+    pub fn hiding(&self) -> &NonceCommitment {
+        &self.hiding
+    }
+
+    pub fn binding(&self) -> &NonceCommitment {
+        &self.binding
+    }
+
     pub fn identity(&self) -> &Identity {
         &self.identity
     }
