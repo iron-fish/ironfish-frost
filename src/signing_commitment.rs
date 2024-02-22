@@ -6,10 +6,7 @@ use std::io;
 
 use reddsa::frost::redjubjub::round1::NonceCommitment;
 
-use crate::{
-    errors::IronfishError,
-    participant::{Identity, IDENTITY_LEN},
-};
+use crate::participant::{Identity, IDENTITY_LEN};
 
 const SIGNING_COMMITMENT_LENGTH: usize = IDENTITY_LEN + 96;
 
@@ -34,35 +31,41 @@ impl SigningCommitment {
         }
     }
 
-    pub fn serialize(&self) -> [u8; SIGNING_COMMITMENT_LENGTH] {
-        let mut bytes = [0u8; SIGNING_COMMITMENT_LENGTH];
-        self.write(&mut bytes[..]).unwrap();
-        bytes
+    pub fn identity(&self) -> &Identity {
+        &self.identity
     }
 
-    pub fn read<R: io::Read>(mut reader: R) -> Result<Self, IronfishError> {
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+        writer.write_all(&self.identity.serialize())?;
+        writer.write_all(&self.hiding.serialize())?;
+        writer.write_all(&self.binding.serialize())?;
+        Ok(())
+    }
+
+    pub fn serialize(&self) -> io::Result<[u8; SIGNING_COMMITMENT_LENGTH]> {
+        let mut bytes = [0u8; SIGNING_COMMITMENT_LENGTH];
+        self.serialize_into(&mut bytes[..])?;
+        Ok(bytes)
+    }
+
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let identity = Identity::deserialize_from(&mut reader)?;
 
         let mut hiding = [0u8; 32];
         reader.read_exact(&mut hiding)?;
-        let hiding = NonceCommitment::deserialize(hiding)?;
+        let hiding = NonceCommitment::deserialize(hiding)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         let mut binding = [0u8; 32];
         reader.read_exact(&mut binding)?;
-        let binding = NonceCommitment::deserialize(binding)?;
+        let binding = NonceCommitment::deserialize(binding)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         Ok(SigningCommitment {
             identity,
             hiding,
             binding,
         })
-    }
-
-    fn write<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishError> {
-        writer.write_all(&self.identity.serialize())?;
-        writer.write_all(&self.hiding.serialize())?;
-        writer.write_all(&self.binding.serialize())?;
-        Ok(())
     }
 }
 
@@ -87,9 +90,12 @@ mod tests {
             hiding: nonces.hiding().into(),
             binding: nonces.binding().into(),
         };
-        let serialized = signing_commitment.serialize();
+        let serialized = signing_commitment
+            .serialize()
+            .expect("serialization failed");
+
         let deserialized =
-            SigningCommitment::read(&serialized[..]).expect("deserialization failed");
+            SigningCommitment::deserialize_from(&serialized[..]).expect("deserialization failed");
 
         assert_eq!(deserialized, signing_commitment);
     }
