@@ -12,9 +12,9 @@ const SIGNING_COMMITMENT_LENGTH: usize = IDENTITY_LEN + 96;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SigningCommitment {
-    pub identity: Identity,
-    pub hiding: NonceCommitment,
-    pub binding: NonceCommitment,
+    identity: Identity,
+    hiding: NonceCommitment,
+    binding: NonceCommitment,
 }
 
 impl SigningCommitment {
