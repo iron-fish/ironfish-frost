@@ -21,6 +21,19 @@ pub struct SigningCommitment {
 }
 
 impl SigningCommitment {
+    #[must_use]
+    pub fn from_frost(
+        identity: Identity,
+        hiding: NonceCommitment,
+        binding: NonceCommitment,
+    ) -> Self {
+        Self {
+            identity,
+            hiding,
+            binding,
+        }
+    }
+
     pub fn serialize(&self) -> [u8; SIGNING_COMMITMENT_LENGTH] {
         let mut bytes = [0u8; SIGNING_COMMITMENT_LENGTH];
         self.write(&mut bytes[..]).unwrap();
