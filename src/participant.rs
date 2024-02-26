@@ -255,13 +255,7 @@ impl Identity {
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    pub fn verify_data(
-        &self,
-        data: &[u8],
-        signature_bytes: &[u8; 64],
-    ) -> Result<(), SignatureError> {
-        let signature = Signature::from(signature_bytes);
-
+    pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {
         self.verification_key.verify(data, &signature)
     }
 }
@@ -305,6 +299,7 @@ impl<'a> From<&'a Identity> for frost::Identifier {
 mod tests {
     use super::Identity;
     use super::Secret;
+    use ed25519_dalek::Signature;
     use rand::thread_rng;
 
     #[test]
@@ -378,8 +373,21 @@ mod tests {
         let data = b"hello world";
         let signature = secret.sign(data);
 
-        id.verify_data(data, &signature.to_bytes())
+        id.verify_data(data, &signature)
             .expect("verification failed");
+    }
+
+    #[test]
+    fn test_authenticated_invalid_data() {
+        let secret = Secret::random(thread_rng());
+        let id = secret.to_identity();
+
+        let invalid_data = b"fake data";
+        let data = b"hello world";
+        let signature = secret.sign(data);
+
+        id.verify_data(invalid_data, &signature)
+            .expect_err("verification failed");
     }
 
     #[test]
@@ -388,11 +396,9 @@ mod tests {
         let id = secret.to_identity();
 
         let data = b"hello world";
-        let fake_signature = [0u8; 64];
+        let fake_signature = Signature::from([0u8; 64]);
 
-        assert!(
-            id.verify_data(data, &fake_signature).is_err(),
-            "verification failed"
-        );
+        id.verify_data(data, &fake_signature)
+            .expect_err("verification failed");
     }
 }
