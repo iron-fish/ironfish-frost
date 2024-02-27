@@ -14,7 +14,6 @@ use chacha20poly1305::KeyInit;
 use chacha20poly1305::Nonce;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::borrow::Borrow;
 use x25519_dalek::PublicKey;
 use x25519_dalek::ReusableSecret;
 
@@ -35,13 +34,13 @@ where
 /// Encrypt arbitrary `data` once for multiple participants.
 ///
 /// The data can be decrypted by each participant using [`decrypt`].
-pub fn encrypt<I, R>(
+pub fn encrypt<'a, I, R>(
     data: &[u8],
-    recipients: &[I],
+    recipients: I,
     mut csrng: R,
 ) -> MultiRecipientBlob<Vec<EncryptedKey>, Vec<u8>>
 where
-    I: Borrow<Identity>,
+    I: IntoIterator<Item = &'a Identity>,
     R: RngCore + CryptoRng,
 {
     // Use a zero nonce for all encryptions below. This is safe because each encryption key is
@@ -61,9 +60,9 @@ where
     let agreement_secret = ReusableSecret::random_from_rng(csrng);
     let agreement_key = PublicKey::from(&agreement_secret);
     let encrypted_keys = recipients
-        .iter()
+        .into_iter()
         .map(|id| {
-            let recipient_key = id.borrow().encryption_key();
+            let recipient_key = id.encryption_key();
             let shared_secret = agreement_secret.diffie_hellman(recipient_key).to_bytes();
             let mut cipher = ChaCha20::new((&shared_secret).into(), &nonce);
             let mut encrypted_key = encryption_key;
