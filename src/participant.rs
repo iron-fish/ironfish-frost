@@ -256,7 +256,7 @@ impl Identity {
     }
 
     pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {
-        self.verification_key.verify(data, &signature)
+        self.verification_key.verify(data, signature)
     }
 }
 
