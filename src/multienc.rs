@@ -14,6 +14,7 @@ use chacha20poly1305::KeyInit;
 use chacha20poly1305::Nonce;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
+use std::io;
 use x25519_dalek::PublicKey;
 use x25519_dalek::ReusableSecret;
 
@@ -116,10 +117,78 @@ where
         .ok_or(Error)
 }
 
+impl<Keys, Cipher> MultiRecipientBlob<Keys, Cipher>
+where
+    Keys: AsRef<[EncryptedKey]>,
+    Cipher: AsRef<[u8]>,
+{
+    pub fn serialize(&self) -> io::Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        self.serialize_into(&mut buf)?;
+        Ok(buf)
+    }
+
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+        writer.write_all(self.agreement_key.as_bytes())?;
+
+        let encrypted_keys = self.encrypted_keys.as_ref();
+        let encrypted_keys_len: u32 = encrypted_keys
+            .len()
+            .try_into()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        writer.write_all(&encrypted_keys_len.to_le_bytes())?;
+
+        for key in encrypted_keys {
+            writer.write_all(key)?;
+        }
+
+        let ciphertext = self.ciphertext.as_ref();
+        let ciphertext_len: u32 = ciphertext
+            .len()
+            .try_into()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        writer.write_all(&ciphertext_len.to_le_bytes())?;
+        writer.write_all(ciphertext)
+    }
+}
+
+impl MultiRecipientBlob<Vec<EncryptedKey>, Vec<u8>> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        let mut agreement_key = [0u8; 32];
+        reader.read_exact(&mut agreement_key)?;
+        let agreement_key = PublicKey::from(agreement_key);
+
+        let mut encrypted_keys_len = [0u8; 4];
+        reader.read_exact(&mut encrypted_keys_len)?;
+        let encrypted_keys_len = u32::from_le_bytes(encrypted_keys_len) as usize;
+
+        let mut encrypted_keys = Vec::with_capacity(encrypted_keys_len);
+        for _ in 0..encrypted_keys_len {
+            let mut key = EncryptedKey::default();
+            reader.read_exact(&mut key)?;
+            encrypted_keys.push(key);
+        }
+
+        let mut ciphertext_len = [0u8; 4];
+        reader.read_exact(&mut ciphertext_len)?;
+        let ciphertext_len = u32::from_le_bytes(ciphertext_len) as usize;
+
+        let mut ciphertext = vec![0u8; ciphertext_len];
+        reader.read_exact(&mut ciphertext)?;
+
+        Ok(Self {
+            agreement_key,
+            encrypted_keys,
+            ciphertext,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::decrypt;
     use super::encrypt;
+    use super::MultiRecipientBlob;
     use super::KEY_SIZE;
     use crate::participant::Secret;
     use chacha20poly1305::Error;
@@ -179,5 +248,23 @@ mod tests {
             assert_eq!(decrypt(&secret1, &tampered_blob), Err(Error));
             assert_eq!(decrypt(&secret2, &tampered_blob), Err(Error));
         }
+    }
+
+    #[test]
+    fn serialization_roundtrip() {
+        let plaintext = b"hello";
+
+        let secret1 = Secret::random(thread_rng());
+        let secret2 = Secret::random(thread_rng());
+        let id1 = secret1.to_identity();
+        let id2 = secret2.to_identity();
+
+        let blob = encrypt(plaintext, &[id1, id2], thread_rng());
+
+        let serialized_blob = blob.serialize().expect("serialization failed");
+        let deserialized_blob = MultiRecipientBlob::deserialize_from(&serialized_blob[..])
+            .expect("deserialization failed");
+
+        assert_eq!(blob, deserialized_blob);
     }
 }
