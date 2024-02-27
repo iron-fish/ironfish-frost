@@ -9,7 +9,7 @@ use reddsa::frost::redjubjub::round1::NonceCommitment;
 use crate::participant::{Identity, IDENTITY_LEN};
 
 const NONCE_COMMITMENT_LENGTH: usize = 32;
-const SIGNING_COMMITMENT_LENGTH: usize = IDENTITY_LEN + NONCE_COMMITMENT_LENGTH * 2;
+pub const SIGNING_COMMITMENT_LENGTH: usize = IDENTITY_LEN + NONCE_COMMITMENT_LENGTH * 2;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SigningCommitment {
