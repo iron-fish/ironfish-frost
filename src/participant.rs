@@ -3,8 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::frost;
-use ed25519_dalek::Signature;
-use ed25519_dalek::SignatureError;
 use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
@@ -35,6 +33,8 @@ const SIGNATURE_LEN: usize = Signature::BYTE_SIZE;
 pub const IDENTITY_LEN: usize =
     VERSION_LEN + VERIFICATION_KEY_LEN + ENCRYPTION_KEY_LEN + SIGNATURE_LEN;
 
+pub type Signature = ed25519_dalek::Signature;
+pub type SignatureError = ed25519_dalek::SignatureError;
 pub type IdentitySerialization = [u8; IDENTITY_LEN];
 
 /// Returns the portion of identifier data that is signed by [`Secret::signing_key`]
