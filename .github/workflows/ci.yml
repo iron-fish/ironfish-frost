@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: false
+          shared-key: base
+
+      - name: Install Cargo tools
+        run: |
+          rustup component add rustfmt clippy
+
+      - name: Check that cargo lockfile is up to date
+        run: |
+          cargo check --locked --all-targets
+
+      - name: Check for license headers
+        run: ./ci/lintHeaders.sh ./src *.rs
+
+      - name: "`cargo fmt` check"
+        run: |
+          cargo fmt --all -- --check
+
+      - name: "Clippy check on"
+        run: |
+          cargo clippy --all-targets -- -D warnings
