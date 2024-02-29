@@ -39,3 +39,23 @@ jobs:
       - name: "Clippy check on"
         run: |
           cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: false
+          shared-key: base
+
+      - name: Install Cargo tools
+        run: |
+          rustup component add rustfmt clippy
+
+      - name: Run tests
+        run: |
+          cargo test
