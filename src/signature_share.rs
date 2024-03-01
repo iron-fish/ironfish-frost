@@ -10,6 +10,7 @@ use crate::participant::{Identity, IDENTITY_LEN};
 
 const FROST_SIGNATURE_SHARE_LEN: usize = 32;
 
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignatureShare {
     identity: Identity,
     frost_signature_share: FrostSignatureShare,
