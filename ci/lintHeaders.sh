@@ -4,6 +4,10 @@
 # an MPL license header.
 # $ lintHeaders ./src *.rs
 
+echo "Checking license headers"
+
+ls -al ./
+
 license1="/* This Source Code Form is subject to the terms of the Mozilla Public"
 license2=" * License, v. 2.0. If a copy of the MPL was not distributed with this"
 license3=" * file, You can obtain one at https://mozilla.org/MPL/2.0/. */"
