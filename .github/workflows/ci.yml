@@ -26,7 +26,7 @@ jobs:
           rustup component add rustfmt clippy
 
       - name: Check for license headers
-        run: ./ci/lintHeaders.sh ./src *.rs
+        run: ./ci/lintHeaders.sh
 
       - name: "`cargo fmt` check"
         run: |
