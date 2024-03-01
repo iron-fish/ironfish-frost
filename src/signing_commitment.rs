@@ -28,7 +28,7 @@ fn signature_data(
         slice[..part.len()].copy_from_slice(part);
         slice = &mut slice[part.len()..];
     }
-    assert_eq!(slice.len(), 0);
+    debug_assert_eq!(slice.len(), 0);
     data
 }
 
@@ -57,6 +57,7 @@ impl SigningCommitment {
         signing_commitment.verify().map(|_| signing_commitment)
     }
 
+    #[must_use]
     pub fn from_frost(
         secret: Secret,
         hiding: NonceCommitment,
