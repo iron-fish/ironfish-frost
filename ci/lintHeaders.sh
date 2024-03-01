@@ -2,12 +2,13 @@
 
 # Finds files in a given directory with a given file extension that don't have
 # an MPL license header.
+# $ lintHeaders ./src *.rs
 
-license="/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */"
+license1="/* This Source Code Form is subject to the terms of the Mozilla Public"
+license2=" * License, v. 2.0. If a copy of the MPL was not distributed with this"
+license3=" * file, You can obtain one at https://mozilla.org/MPL/2.0/. */"
 
-files=$(find src -type f -name "*.rs")
+files=( $(find src -name "**/*.rs") )
 
 echo "Checking the following files for license headers: ${files[@]}"
 result=0
@@ -21,7 +22,7 @@ expectedHeaderLineNumbers='1
 3'
 
 for file in ${files[@]}; do
-  if ! [[ "$(head -n3 "$1")" = "$license" ]]; then
+  if ! [ "$(headerLineNumbers $file)" = "$expectedHeaderLineNumbers" ]; then
     echo "$file"
     result=1
   fi
