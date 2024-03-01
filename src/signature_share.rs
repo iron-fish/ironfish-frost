@@ -13,6 +13,7 @@ pub const SIGNATURE_SHARE_SERIALIZATION_LEN: usize = IDENTITY_LEN + FROST_SIGNAT
 
 pub type SignatureShareSerialization = [u8; SIGNATURE_SHARE_SERIALIZATION_LEN];
 
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignatureShare {
     identity: Identity,
     frost_signature_share: FrostSignatureShare,

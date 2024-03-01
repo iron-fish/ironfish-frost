@@ -59,6 +59,7 @@ fn authenticated_data(
 
 /// Secret keys of a participant.
 #[derive(Clone)]
+#[allow(missing_debug_implementations)]
 pub struct Secret {
     signing_key: SigningKey,
     decryption_key: StaticSecret,
