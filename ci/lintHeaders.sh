@@ -12,7 +12,7 @@ license1="/* This Source Code Form is subject to the terms of the Mozilla Public
 license2=" * License, v. 2.0. If a copy of the MPL was not distributed with this"
 license3=" * file, You can obtain one at https://mozilla.org/MPL/2.0/. */"
 
-files=( src/**/*.rs )  
+files=( $(find src -name "*.rs") )
 
 echo "All files: ${files[@]}"
 echo "Checking ${#files[@]} files for license headers"
