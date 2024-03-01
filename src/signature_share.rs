@@ -9,7 +9,11 @@ use reddsa::frost::redjubjub::round2::SignatureShare as FrostSignatureShare;
 use crate::participant::{Identity, IDENTITY_LEN};
 
 const FROST_SIGNATURE_SHARE_LEN: usize = 32;
+pub const SIGNATURE_SHARE_SERIALIZATION_LEN: usize = IDENTITY_LEN + FROST_SIGNATURE_SHARE_LEN;
 
+pub type SignatureShareSerialization = [u8; SIGNATURE_SHARE_SERIALIZATION_LEN];
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignatureShare {
     identity: Identity,
     frost_signature_share: FrostSignatureShare,
@@ -32,29 +36,25 @@ impl SignatureShare {
         &self.frost_signature_share
     }
 
-    pub fn serialize(&self) -> io::Result<Vec<u8>> {
-        let mut s = Vec::new();
-        self.serialize_into(&mut s)?;
-        Ok(s)
+    pub fn serialize(&self) -> SignatureShareSerialization {
+        let mut s = [0u8; SIGNATURE_SHARE_SERIALIZATION_LEN];
+        self.serialize_into(&mut s[..])
+            .expect("array too small to contain serialization");
+        s
     }
 
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
-        let identity_bytes = self.identity.serialize();
-        let signature_share_bytes = self.frost_signature_share.serialize();
-        writer.write_all(&identity_bytes)?;
-        writer.write_all(&signature_share_bytes)?;
+        self.identity.serialize_into(&mut writer)?;
 
-        Ok(())
+        let signature_share_bytes = self.frost_signature_share.serialize();
+        writer.write_all(&signature_share_bytes)
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
-        let mut identity_bytes = [0u8; IDENTITY_LEN];
+        let identity = Identity::deserialize_from(&mut reader)?;
+
         let mut signature_share_bytes = [0u8; FROST_SIGNATURE_SHARE_LEN];
-        reader.read_exact(&mut identity_bytes)?;
         reader.read_exact(&mut signature_share_bytes)?;
-
-        let identity = Identity::deserialize_from(&identity_bytes[..])?;
-
         let frost_signature_share = FrostSignatureShare::deserialize(signature_share_bytes)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
