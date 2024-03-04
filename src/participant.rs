@@ -3,8 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::frost;
-use ed25519_dalek::Signature;
-use ed25519_dalek::SignatureError;
 use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
@@ -35,6 +33,8 @@ const SIGNATURE_LEN: usize = Signature::BYTE_SIZE;
 pub const IDENTITY_LEN: usize =
     VERSION_LEN + VERIFICATION_KEY_LEN + ENCRYPTION_KEY_LEN + SIGNATURE_LEN;
 
+pub type Signature = ed25519_dalek::Signature;
+pub type SignatureError = ed25519_dalek::SignatureError;
 pub type IdentitySerialization = [u8; IDENTITY_LEN];
 
 /// Returns the portion of identifier data that is signed by [`Secret::signing_key`]
@@ -59,6 +59,7 @@ fn authenticated_data(
 
 /// Secret keys of a participant.
 #[derive(Clone)]
+#[allow(missing_debug_implementations)]
 pub struct Secret {
     signing_key: SigningKey,
     decryption_key: StaticSecret,
@@ -142,6 +143,10 @@ impl Secret {
             decryption_key,
             identity: OnceCell::new(),
         })
+    }
+
+    pub fn sign(&self, data: &[u8]) -> Signature {
+        self.signing_key.sign(data)
     }
 }
 
@@ -250,6 +255,10 @@ impl Identity {
         Self::new(verification_key, encryption_key, signature)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
+
+    pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {
+        self.verification_key.verify(data, signature)
+    }
 }
 
 // Need to implement `Hash` manually because `Signature` does not implement it
@@ -291,6 +300,7 @@ impl<'a> From<&'a Identity> for frost::Identifier {
 mod tests {
     use super::Identity;
     use super::Secret;
+    use ed25519_dalek::Signature;
     use rand::thread_rng;
 
     #[test]
@@ -354,5 +364,42 @@ mod tests {
         let frost_id1 = id.to_frost_identifier();
         let frost_id2 = id.to_frost_identifier();
         assert_eq!(frost_id1, frost_id2);
+    }
+
+    #[test]
+    fn test_authenticated_data() {
+        let secret = Secret::random(thread_rng());
+        let id = secret.to_identity();
+
+        let data = b"hello world";
+        let signature = secret.sign(data);
+
+        id.verify_data(data, &signature)
+            .expect("verification failed");
+    }
+
+    #[test]
+    fn test_authenticated_invalid_data() {
+        let secret = Secret::random(thread_rng());
+        let id = secret.to_identity();
+
+        let invalid_data = b"fake data";
+        let data = b"hello world";
+        let signature = secret.sign(data);
+
+        id.verify_data(invalid_data, &signature)
+            .expect_err("verification failed");
+    }
+
+    #[test]
+    fn test_authenticated_data_bad_signature() {
+        let secret = Secret::random(thread_rng());
+        let id = secret.to_identity();
+
+        let data = b"hello world";
+        let fake_signature = Signature::from([0u8; 64]);
+
+        id.verify_data(data, &fake_signature)
+            .expect_err("verification failed");
     }
 }
