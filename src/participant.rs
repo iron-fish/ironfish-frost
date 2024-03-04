@@ -277,6 +277,7 @@ impl PartialOrd<Self> for Identity {
 }
 
 // Need to implement `Hash` manually because `Signature` does not implement it
+#[allow(clippy::derive_hash_xor_eq)]
 impl Hash for Identity {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.serialize().hash(state);
