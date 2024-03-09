@@ -10,6 +10,7 @@ use ed25519_dalek::VerifyingKey;
 use once_cell::sync::OnceCell;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
+use std::cmp;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::io;
@@ -258,6 +259,20 @@ impl Identity {
 
     pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {
         self.verification_key.verify(data, signature)
+    }
+}
+
+impl Ord for Identity {
+    #[inline]
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        Ord::cmp(&self.serialize(), &other.serialize())
+    }
+}
+
+impl PartialOrd<Self> for Identity {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        PartialOrd::partial_cmp(&self.serialize(), &other.serialize())
     }
 }
 

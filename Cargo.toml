@@ -17,6 +17,7 @@ once_cell = "1.8.0"
 rand_chacha = "0.3.1"
 rand_core = "0.6.4"
 reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev = "311baf8865f6e21527d1f20750d8f2cf5c9e531a", features = ["frost", "frost-rerandomized"] }
+siphasher = "1.0.0"
 x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets"] }
 
 [dev-dependencies]
