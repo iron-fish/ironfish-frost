@@ -8,7 +8,7 @@ use std::io;
 pub struct PublicKeyPackage {
     frost_public_key_package: FrostPublicKeyPackage,
     identities: Vec<Identity>,
-    min_signers: u64,
+    min_signers: u16,
 }
 
 impl PublicKeyPackage {
@@ -16,7 +16,7 @@ impl PublicKeyPackage {
     pub fn from_frost<I>(
         frost_public_key_package: FrostPublicKeyPackage,
         identities: I,
-        min_signers: u64,
+        min_signers: u16,
     ) -> Self
     where
         I: IntoIterator<Item = Identity>,
@@ -40,7 +40,7 @@ impl PublicKeyPackage {
         &self.frost_public_key_package
     }
 
-    pub fn min_signers(&self) -> u64 {
+    pub fn min_signers(&self) -> u16 {
         self.min_signers
     }
 
@@ -94,9 +94,9 @@ impl PublicKeyPackage {
             identities.push(Identity::deserialize_from(&mut reader)?);
         }
 
-        let mut min_signers = [0u8; 8];
+        let mut min_signers = [0u8; 2];
         reader.read_exact(&mut min_signers)?;
-        let min_signers = u64::from_le_bytes(min_signers);
+        let min_signers = u16::from_le_bytes(min_signers);
 
         Ok(PublicKeyPackage {
             frost_public_key_package,
