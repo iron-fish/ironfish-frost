@@ -39,8 +39,8 @@ impl PublicKeyPackage {
         &self.frost_public_key_package
     }
 
-    pub fn min_signers(&self) -> &u64 {
-        &self.min_signers
+    pub fn min_signers(&self) -> u64 {
+        self.min_signers
     }
 
     pub fn serialize(&self) -> io::Result<Vec<u8>> {
