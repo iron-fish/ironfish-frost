@@ -1,5 +1,6 @@
+use reddsa::frost::redjubjub::VerifyingKey;
+
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
-use crate::frost::VerifyingKey;
 use crate::participant::Identity;
 use std::io;
 
@@ -102,5 +103,50 @@ impl PublicKeyPackage {
             identities,
             min_signers,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::thread_rng;
+    use reddsa::frost::{
+        redjubjub::{keys::split, SigningKey},
+        redpallas::frost::keys::IdentifierList,
+    };
+
+    use crate::participant::Secret;
+
+    use super::PublicKeyPackage;
+
+    #[test]
+    fn serialization_roundtrip() {
+        let secret1 = Secret::random(thread_rng());
+        let secret2 = Secret::random(thread_rng());
+        let id1 = secret1.to_identity();
+        let id2 = secret2.to_identity();
+
+        let mut rng = thread_rng();
+        let signing_key = SigningKey::new(&mut rng);
+
+        let (_, frost_public_key_package) = split(
+            &signing_key,
+            2,
+            2,
+            IdentifierList::Custom(&[id1.to_frost_identifier(), id2.to_frost_identifier()]),
+            &mut rng,
+        )
+        .expect("signing key split failed");
+
+        let public_key_package =
+            PublicKeyPackage::from_frost(frost_public_key_package, [id1, id2], 2);
+
+        let serialized = public_key_package
+            .serialize()
+            .expect("public key package serialization failed");
+
+        let deserialized = PublicKeyPackage::deserialize_from(&serialized[..])
+            .expect("public key package deserialization failed");
+
+        assert_eq!(public_key_package, deserialized)
     }
 }
