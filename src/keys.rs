@@ -58,15 +58,15 @@ impl PublicKeyPackage {
         let public_key_package = self
             .frost_public_key_package
             .serialize()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
         let public_key_package_len = u32::try_from(public_key_package.len())
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+            .map_err(io::Error::other)?
             .to_le_bytes();
         writer.write_all(&public_key_package_len)?;
         writer.write_all(&public_key_package)?;
 
         let identities_len = u32::try_from(self.identities.len())
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+            .map_err(io::Error::other)?
             .to_le_bytes();
         writer.write_all(&identities_len)?;
         for identity in &self.identities {
@@ -87,7 +87,7 @@ impl PublicKeyPackage {
         reader.read_exact(&mut frost_public_key_package)?;
         let frost_public_key_package =
             FrostPublicKeyPackage::deserialize(&frost_public_key_package)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                .map_err(io::Error::other)?;
 
         let mut identities_len = [0u8; 4];
         reader.read_exact(&mut identities_len)?;

@@ -7,9 +7,9 @@ use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
 use ed25519_dalek::VerifyingKey;
-use once_cell::sync::OnceCell;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
+use std::cell::OnceCell;
 use std::cmp;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -125,10 +125,7 @@ impl Secret {
         let mut version = [0u8; VERSION_LEN];
         reader.read_exact(&mut version)?;
         if version != VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported serialization version number",
-            ));
+            return Err(io::Error::other("unsupported serialization version number"));
         }
 
         let mut signing_key = [0u8; SIGNING_KEY_LEN];
@@ -234,16 +231,13 @@ impl Identity {
         let mut version = [0u8; VERSION_LEN];
         reader.read_exact(&mut version)?;
         if version != VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported serialization version number",
-            ));
+            return Err(io::Error::other("unsupported serialization version number"));
         }
 
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
-        let verification_key = VerifyingKey::from_bytes(&verification_key)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let verification_key =
+            VerifyingKey::from_bytes(&verification_key).map_err(io::Error::other)?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -253,8 +247,7 @@ impl Identity {
         reader.read_exact(&mut signature)?;
         let signature = Signature::from(signature);
 
-        Self::new(verification_key, encryption_key, signature)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        Self::new(verification_key, encryption_key, signature).map_err(io::Error::other)
     }
 
     pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {
@@ -272,12 +265,12 @@ impl Ord for Identity {
 impl PartialOrd<Self> for Identity {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(&self.serialize(), &other.serialize())
+        Some(self.cmp(other))
     }
 }
 
 // Need to implement `Hash` manually because `Signature` does not implement it
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for Identity {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.serialize().hash(state);

@@ -132,10 +132,7 @@ where
         writer.write_all(self.agreement_key.as_bytes())?;
 
         let encrypted_keys = self.encrypted_keys.as_ref();
-        let encrypted_keys_len: u32 = encrypted_keys
-            .len()
-            .try_into()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let encrypted_keys_len: u32 = encrypted_keys.len().try_into().map_err(io::Error::other)?;
         writer.write_all(&encrypted_keys_len.to_le_bytes())?;
 
         for key in encrypted_keys {
@@ -143,10 +140,7 @@ where
         }
 
         let ciphertext = self.ciphertext.as_ref();
-        let ciphertext_len: u32 = ciphertext
-            .len()
-            .try_into()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let ciphertext_len: u32 = ciphertext.len().try_into().map_err(io::Error::other)?;
         writer.write_all(&ciphertext_len.to_le_bytes())?;
         writer.write_all(ciphertext)
     }

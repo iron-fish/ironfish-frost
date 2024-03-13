@@ -55,8 +55,8 @@ impl SignatureShare {
 
         let mut signature_share_bytes = [0u8; FROST_SIGNATURE_SHARE_LEN];
         reader.read_exact(&mut signature_share_bytes)?;
-        let frost_signature_share = FrostSignatureShare::deserialize(signature_share_bytes)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let frost_signature_share =
+            FrostSignatureShare::deserialize(signature_share_bytes).map_err(io::Error::other)?;
 
         Ok(SignatureShare {
             identity,

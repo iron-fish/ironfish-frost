@@ -204,13 +204,11 @@ impl SigningCommitment {
 
         let mut hiding = [0u8; 32];
         reader.read_exact(&mut hiding)?;
-        let hiding = NonceCommitment::deserialize(hiding)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let hiding = NonceCommitment::deserialize(hiding).map_err(io::Error::other)?;
 
         let mut binding = [0u8; 32];
         reader.read_exact(&mut binding)?;
-        let binding = NonceCommitment::deserialize(binding)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let binding = NonceCommitment::deserialize(binding).map_err(io::Error::other)?;
 
         let raw_commitments = SigningCommitments::new(hiding, binding);
 
@@ -219,7 +217,7 @@ impl SigningCommitment {
         let checksum = Checksum::from_le_bytes(checksum);
 
         Self::from_raw_parts(identity, raw_commitments, checksum, signature)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            .map_err(io::Error::other)
     }
 }
 
