@@ -7,10 +7,15 @@ use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
+use crate::multienc;
+use crate::multienc::MultiRecipientBlob;
+use crate::participant;
 use crate::serde::read_u16;
 use crate::serde::read_variable_length;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
+use rand_core::CryptoRng;
+use rand_core::RngCore;
 use std::io;
 use std::mem;
 
@@ -24,6 +29,24 @@ struct SerializableSecretPackage {
     commitment: VerifiableSecretSharingCommitment,
     min_signers: u16,
     max_signers: u16,
+}
+
+impl From<SecretPackage> for SerializableSecretPackage {
+    #[inline]
+    fn from(pkg: SecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
+impl From<SerializableSecretPackage> for SecretPackage {
+    #[inline]
+    fn from(pkg: SerializableSecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
 }
 
 impl SerializableSecretPackage {
@@ -75,22 +98,27 @@ impl SerializableSecretPackage {
     }
 }
 
-impl From<SecretPackage> for SerializableSecretPackage {
-    #[inline]
-    fn from(pkg: SecretPackage) -> Self {
-        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
-        // size, alignment, and semantics
-        unsafe { mem::transmute(pkg) }
+pub fn export_secret_package<R: RngCore + CryptoRng>(
+    identity: &participant::Identity,
+    pkg: &SecretPackage,
+    csrng: R,
+) -> io::Result<Vec<u8>> {
+    let serializable = SerializableSecretPackage::from(pkg.clone());
+    if serializable.identifier != identity.to_frost_identifier() {
+        return Err(io::Error::other("identity mismatch"));
     }
+    let mut serialized = Vec::new();
+    serializable.serialize_into(&mut serialized)?;
+    multienc::encrypt(&serialized, [identity], csrng).serialize()
 }
 
-impl From<SerializableSecretPackage> for SecretPackage {
-    #[inline]
-    fn from(pkg: SerializableSecretPackage) -> Self {
-        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
-        // size, alignment, and semantics
-        unsafe { mem::transmute(pkg) }
-    }
+pub fn import_secret_package(
+    secret: &participant::Secret,
+    exported: &[u8],
+) -> io::Result<SecretPackage> {
+    let exported = MultiRecipientBlob::deserialize_from(exported)?;
+    let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+    SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
 #[cfg(test)]
@@ -117,5 +145,23 @@ mod tests {
                 .into();
 
         assert_eq!(secret_pkg, deserialized);
+    }
+
+    #[test]
+    fn export_import() {
+        let secret = participant::Secret::random(thread_rng());
+        let (secret_pkg, _pkg) = frost::keys::dkg::part1(
+            secret.to_identity().to_frost_identifier(),
+            20,
+            5,
+            thread_rng(),
+        )
+        .expect("dkg round 1 failed");
+
+        let exported = export_secret_package(&secret.to_identity(), &secret_pkg, thread_rng())
+            .expect("export failed");
+        let imported = import_secret_package(&secret, &exported).expect("import failed");
+
+        assert_eq!(secret_pkg, imported);
     }
 }

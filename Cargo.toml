@@ -11,7 +11,7 @@ repository = "https://github.com/iron-fish/ironfish-frost"
 [dependencies]
 blake3 = "1.5.0"
 chacha20 = "0.9.1"
-chacha20poly1305 = "0.10.1"
+chacha20poly1305 = { version = "0.10.1", features = ["std"] }
 ed25519-dalek = { version = "2.1.0", features = ["rand_core"] }
 rand_chacha = "0.3.1"
 rand_core = "0.6.4"
