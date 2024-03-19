@@ -2,10 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use reddsa::frost::redjubjub::VerifyingKey;
-
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
 use crate::participant::Identity;
+use crate::serde::read_u16;
+use crate::serde::read_variable_length;
+use crate::serde::read_variable_length_bytes;
+use crate::serde::write_u16;
+use crate::serde::write_variable_length;
+use crate::serde::write_variable_length_bytes;
+use reddsa::frost::redjubjub::VerifyingKey;
 use std::io;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -56,52 +61,27 @@ impl PublicKeyPackage {
     }
 
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
-        let public_key_package = self
+        let frost_public_key_package = self
             .frost_public_key_package
             .serialize()
             .map_err(io::Error::other)?;
-        let public_key_package_len = u32::try_from(public_key_package.len())
-            .map_err(io::Error::other)?
-            .to_le_bytes();
-        writer.write_all(&public_key_package_len)?;
-        writer.write_all(&public_key_package)?;
-
-        let identities_len = u32::try_from(self.identities.len())
-            .map_err(io::Error::other)?
-            .to_le_bytes();
-        writer.write_all(&identities_len)?;
-        for identity in &self.identities {
-            let identity_bytes = identity.serialize();
-            writer.write_all(&identity_bytes)?
-        }
-        writer.write_all(&self.min_signers.to_le_bytes())?;
+        write_variable_length_bytes(&mut writer, &frost_public_key_package)?;
+        write_variable_length(&mut writer, &self.identities, |writer, identity| {
+            identity.serialize_into(writer)
+        })?;
+        write_u16(&mut writer, self.min_signers)?;
 
         Ok(())
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
-        let mut public_key_package_len = [0u8; 4];
-        reader.read_exact(&mut public_key_package_len)?;
-        let public_key_package_len = u32::from_le_bytes(public_key_package_len) as usize;
-
-        let mut frost_public_key_package = vec![0u8; public_key_package_len];
-        reader.read_exact(&mut frost_public_key_package)?;
+        let frost_public_key_package = read_variable_length_bytes(&mut reader)?;
         let frost_public_key_package =
             FrostPublicKeyPackage::deserialize(&frost_public_key_package)
                 .map_err(io::Error::other)?;
-
-        let mut identities_len = [0u8; 4];
-        reader.read_exact(&mut identities_len)?;
-        let identities_len = u32::from_le_bytes(identities_len) as usize;
-
-        let mut identities = Vec::with_capacity(identities_len);
-        for _ in 0..identities_len {
-            identities.push(Identity::deserialize_from(&mut reader)?);
-        }
-
-        let mut min_signers = [0u8; 2];
-        reader.read_exact(&mut min_signers)?;
-        let min_signers = u16::from_le_bytes(min_signers);
+        let identities =
+            read_variable_length(&mut reader, |reader| Identity::deserialize_from(reader))?;
+        let min_signers = read_u16(&mut reader)?;
 
         Ok(PublicKeyPackage {
             frost_public_key_package,

@@ -8,10 +8,13 @@
 #![warn(unused_crate_dependencies)]
 #![warn(unused_qualifications)]
 
+mod serde;
+
 pub mod keys;
 pub mod multienc;
 pub mod nonces;
 pub mod participant;
 pub mod signature_share;
 pub mod signing_commitment;
+
 pub use reddsa::frost::redjubjub as frost;
