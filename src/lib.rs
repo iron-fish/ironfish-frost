@@ -8,6 +8,8 @@
 #![warn(unused_crate_dependencies)]
 #![warn(unused_qualifications)]
 
+pub mod checksum;
+pub mod dkg;
 pub mod keys;
 pub mod multienc;
 pub mod nonces;
