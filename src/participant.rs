@@ -310,6 +310,7 @@ mod tests {
     use super::Identity;
     use super::Secret;
     use ed25519_dalek::Signature;
+    use hex_literal::hex;
     use rand::thread_rng;
 
     #[test]
@@ -331,6 +332,19 @@ mod tests {
     }
 
     #[test]
+    fn secret_deserialization_regression() {
+        let serialization = hex!(
+            "
+            72adb5f2526cba20e38cb7e44466503d41823e2da95c68faa1904ada33d8660edeb
+            29e91c501aca3bb7791fe37ae562ff50fcf88bb3af9a64671ace8f6095bb169
+        "
+        );
+        let deserialized =
+            Secret::deserialize_from(&serialization[..]).expect("deserialization failed");
+        assert_eq!(serialization, deserialized.serialize());
+    }
+
+    #[test]
     fn identity_serialization_stability() {
         let secret = Secret::random(thread_rng());
         let id = secret.to_identity();
@@ -348,6 +362,21 @@ mod tests {
             Identity::deserialize_from(&serialization[..]).expect("deserialization failed");
         deserialized.verify().expect("verification failed");
         assert_eq!(id, deserialized);
+    }
+
+    #[test]
+    fn identity_deserialization_regression() {
+        let serialization = hex!(
+            "
+            723c692fa94b563faa41cf99b5759f8d0dc2606c90df30e8ae1813b1068d5cddd60
+            0c88978733e6399d65a1b5c5c025030a3505737c4207075e11fce168ba97246a545
+            92e5217ea54b1bc68efcdf15e8bf227d098d84d403994cebe774a119cfcbcec2eee
+            a73d09306e395019d9b891e8c9d6acaa1751cacde66f4010f748c9e0d
+        "
+        );
+        let deserialized =
+            Identity::deserialize_from(&serialization[..]).expect("deserialization failed");
+        assert_eq!(serialization, deserialized.serialize());
     }
 
     #[test]

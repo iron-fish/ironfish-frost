@@ -64,3 +64,25 @@ impl SignatureShare {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hex_literal::hex;
+
+    #[test]
+    fn deserialization_regression() {
+        let serialization = hex!(
+            "
+            723c692fa94b563faa41cf99b5759f8d0dc2606c90df30e8ae1813b1068d5cddd60
+            0c88978733e6399d65a1b5c5c025030a3505737c4207075e11fce168ba97246a545
+            92e5217ea54b1bc68efcdf15e8bf227d098d84d403994cebe774a119cfcbcec2eee
+            a73d09306e395019d9b891e8c9d6acaa1751cacde66f4010f748c9e0d705b03830c
+            7c83e0c5e95a21dfb8f1976cf40cd67541f38bb75d1fed1bb9cc09
+        "
+        );
+        let deserialized =
+            SignatureShare::deserialize_from(&serialization[..]).expect("deserialization failed");
+        assert_eq!(serialization, deserialized.serialize());
+    }
+}

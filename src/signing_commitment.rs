@@ -227,6 +227,7 @@ mod tests {
     use super::SigningCommitment;
     use crate::frost::keys::SigningShare;
     use crate::participant::Secret;
+    use hex_literal::hex;
     use rand::thread_rng;
 
     #[test]
@@ -254,6 +255,25 @@ mod tests {
             SigningCommitment::deserialize_from(&serialized[..]).expect("deserialization failed");
 
         assert_eq!(deserialized, commitment);
+    }
+
+    #[test]
+    fn deserialization_regression() {
+        let serialization = hex!(
+            "
+            307be5a2c20495d05966fc12b2cee3ea4d44cb3623f92b0f6a391c626fa7708e835
+            26e886448d5ef376c5d09675aed3e711cd3e0df9f6c607604e6a7371a210e725c3a
+            20a22aebc59d856bfbaa48fde8f8ea6fe48ddd978555932c283e760397f78b4b468
+            2f9b70f8baad6d7752f5e25bcbc6b3453d16d92589da722ad13a7390d0057c6aae8
+            363a50e835b89b44bccdd5889ef5a362fa89d841c96e65b34dbe3adf8f71faa041f
+            394ef6b127c4b6b1e43714f32c450e8d3d089b376915acd6500639cad9b202c479e
+            4216e2d4d16cad09b634e01270f4a52707d924fd9834e6206f48f04388ae90bcd63
+            f901369c6034760245574a2d3068f52b617d33ca1a417ea391d3785b542f5
+        "
+        );
+        let deserialized = SigningCommitment::deserialize_from(&serialization[..])
+            .expect("deserialization failed");
+        assert_eq!(serialization, deserialized.serialize());
     }
 
     #[test]
