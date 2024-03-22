@@ -113,15 +113,14 @@ impl PublicKeyPackage {
 
 #[cfg(test)]
 mod tests {
+    use super::PublicKeyPackage;
+    use crate::participant::Secret;
+    use hex_literal::hex;
     use rand::thread_rng;
     use reddsa::frost::{
         redjubjub::{keys::split, SigningKey},
         redpallas::frost::keys::IdentifierList,
     };
-
-    use crate::participant::Secret;
-
-    use super::PublicKeyPackage;
 
     #[test]
     fn serialization_roundtrip() {
@@ -151,5 +150,29 @@ mod tests {
             .expect("public key package deserialization failed");
 
         assert_eq!(public_key_package, deserialized)
+    }
+
+    #[test]
+    fn deserialization_regression() {
+        let serialization = hex!(
+            "
+            a600000000c3d2051e02b62709a88950f3a75eb0d03a9510123a72947eb083b5822
+            e874793e8f40f6b0ba381109571a24f9f87421f0393f45cee913ef891bd75eb7ba7
+            a5611858a80305cf631451a7d94604cb32d11285ebd4b6ee797eceaa464b2dfcd09
+            7295cacf90c579265130e9e37225a23dfd51da2c4b8db499cb0e7aa6b03a15cde2d
+            b678e99c94974b2a766f83b134c5c782803f5f5a65bc4a6392f6a81062ad8292e84
+            4f3c00200000072cf6be086f2453ec7ce6f7b76fbb35c4dcf6fac1737dbcc2a2467
+            b3f0c8453574ad36e9dd2b092aa0870930ed6be8d9ba40c146c5b2110fbb03f7e3b
+            60e5d63347f47bd69c418630d0c4d3301f0a910c3d127c9d7064cedf26c0c2f0cea
+            9486a8993eea77744ead60ea210bc43a4c56be4933762dddaba145fb215c5dbaebc
+            a0272586e451ceb90d00fde8fa96f7eba99845066803aef4073ca39f3af9050b9f0
+            bc63deb3652c1455090070a8dd3376128e093726a055bab2e2d2325cb5c978b62eb
+            a97c6b42325cf4fc106321b7c8979fc123dc77a5da91ace3b3245405d680b9bcc13
+            5828ac28415305d74abe2ca084639dd1ab7bb8c69930cf0a55a1151022020200
+        "
+        );
+        let deserialized =
+            PublicKeyPackage::deserialize_from(&serialization[..]).expect("deserialization failed");
+        assert_eq!(&serialization[..], deserialized.serialize());
     }
 }
