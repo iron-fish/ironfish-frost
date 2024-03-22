@@ -48,10 +48,11 @@ impl PublicKeyPackage {
         self.min_signers
     }
 
-    pub fn serialize(&self) -> io::Result<Vec<u8>> {
-        let mut s = Vec::new();
-        self.serialize_into(&mut s)?;
-        Ok(s)
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.serialize_into(&mut bytes)
+            .expect("serialization failed");
+        bytes
     }
 
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
@@ -144,9 +145,7 @@ mod tests {
         let public_key_package =
             PublicKeyPackage::from_frost(frost_public_key_package, [id1, id2], 2);
 
-        let serialized = public_key_package
-            .serialize()
-            .expect("public key package serialization failed");
+        let serialized = public_key_package.serialize();
 
         let deserialized = PublicKeyPackage::deserialize_from(&serialized[..])
             .expect("public key package deserialization failed");
