@@ -2,6 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use crate::checksum::Checksum;
+use crate::checksum::ChecksumError;
+use crate::checksum::CHECKSUM_LEN;
 use crate::frost::keys::SigningShare;
 use crate::frost::round1::NonceCommitment;
 use crate::frost::round1::SigningCommitments;
@@ -13,29 +16,12 @@ use crate::participant::SignatureError;
 use crate::participant::IDENTITY_LEN;
 use siphasher::sip::SipHasher24;
 use std::borrow::Borrow;
-use std::error;
-use std::fmt;
 use std::hash::Hasher;
 use std::io;
 
 const NONCE_COMMITMENT_LEN: usize = 32;
-const CHECKSUM_LEN: usize = 8;
 pub const AUTHENTICATED_DATA_LEN: usize = IDENTITY_LEN + NONCE_COMMITMENT_LEN * 2 + CHECKSUM_LEN;
 pub const SIGNING_COMMITMENT_LEN: usize = AUTHENTICATED_DATA_LEN + Signature::BYTE_SIZE;
-
-type Checksum = u64;
-
-#[derive(Clone, Debug)]
-pub struct ChecksumError;
-
-impl fmt::Display for ChecksumError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt("checksum doesn't match", f)
-    }
-}
-
-impl error::Error for ChecksumError {}
 
 #[must_use]
 fn input_checksum<I>(transaction_hash: &[u8], signing_participants: &[I]) -> Checksum

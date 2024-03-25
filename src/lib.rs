@@ -10,6 +10,7 @@
 
 mod serde;
 
+pub mod checksum;
 pub mod keys;
 pub mod multienc;
 pub mod nonces;
