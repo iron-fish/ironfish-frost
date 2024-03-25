@@ -8,6 +8,7 @@
 #![warn(unused_crate_dependencies)]
 #![warn(unused_qualifications)]
 
+mod checksum;
 mod serde;
 
 pub mod keys;
