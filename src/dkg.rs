@@ -28,6 +28,7 @@ mod round1 {
     pub struct Package {
         identity: Identity,
         frost_package: frost_round1::Package,
+        group_key_part: [u8; 32],
         checksum: Checksum,
     }
 
@@ -58,6 +59,7 @@ mod round1 {
             identity: Identity,
             signing_participants: &[Identity],
             min_signers: u16,
+            group_key_part: [u8; 32],
             frost_package: frost_round1::Package,
         ) -> Self {
             let checksum = input_checksum(min_signers, signing_participants);
@@ -65,6 +67,7 @@ mod round1 {
             Package {
                 identity,
                 frost_package,
+                group_key_part,
                 checksum,
             }
         }
@@ -117,6 +120,7 @@ pub fn part1<T: RngCore + CryptoRng>(
     identity: Identity,
     signing_participants: &[Identity],
     min_signers: u16,
+    group_key_part: [u8; 32],
     rng: T,
 ) -> Result<(frost_round1::SecretPackage, round1::Package), Error> {
     let max_signers = signing_participants.len() as u16;
@@ -130,7 +134,13 @@ pub fn part1<T: RngCore + CryptoRng>(
 
     Ok((
         secret_package,
-        round1::Package::new(identity, signing_participants, min_signers, frost_package),
+        round1::Package::new(
+            identity,
+            signing_participants,
+            min_signers,
+            group_key_part,
+            frost_package,
+        ),
     ))
 }
 
@@ -241,6 +251,7 @@ pub fn part2(
 
 #[cfg(test)]
 mod tests {
+    use rand::random;
     use rand::thread_rng;
 
     use crate::dkg::part1;
@@ -250,6 +261,8 @@ mod tests {
     #[test]
     fn test_round1_checksum_stability() {
         let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
 
         let signing_participants = [
             Secret::random(&mut rng).to_identity(),
@@ -265,6 +278,7 @@ mod tests {
             identity.clone(),
             &signing_participants,
             min_signers1,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -273,6 +287,7 @@ mod tests {
             identity.clone(),
             &signing_participants,
             min_signers1,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -283,6 +298,8 @@ mod tests {
     #[test]
     fn test_round1_checksum_variation_with_min_signers() {
         let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
 
         let signing_participants = [
             Secret::random(&mut rng).to_identity(),
@@ -299,6 +316,7 @@ mod tests {
             identity.clone(),
             &signing_participants,
             min_signers1,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -307,6 +325,7 @@ mod tests {
             identity.clone(),
             &signing_participants,
             min_signers2,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -317,6 +336,8 @@ mod tests {
     #[test]
     fn test_round1_checksum_variation_with_signing_participants() {
         let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
 
         let identity = Secret::random(&mut rng).to_identity();
 
@@ -338,6 +359,7 @@ mod tests {
             identity.clone(),
             &signing_participants1,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -346,6 +368,7 @@ mod tests {
             identity.clone(),
             &signing_participants2,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -355,6 +378,8 @@ mod tests {
     #[test]
     fn test_round2_checksum_stability() {
         let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
 
         let identity1 = Secret::random(&mut rng).to_identity();
         let identity2 = Secret::random(&mut rng).to_identity();
@@ -367,6 +392,7 @@ mod tests {
             identity1.clone(),
             &signing_participants,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -375,6 +401,7 @@ mod tests {
             identity2.clone(),
             &signing_participants,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -407,6 +434,8 @@ mod tests {
     fn test_round2_checksum_variation_with_packages() {
         let mut rng = thread_rng();
 
+        let group_key_part: [u8; 32] = random();
+
         let identity1 = Secret::random(&mut rng).to_identity();
         let identity2 = Secret::random(&mut rng).to_identity();
 
@@ -418,6 +447,7 @@ mod tests {
             identity1.clone(),
             &signing_participants,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -426,6 +456,7 @@ mod tests {
             identity2.clone(),
             &signing_participants,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
@@ -434,6 +465,7 @@ mod tests {
             identity2.clone(),
             &signing_participants,
             min_signers,
+            group_key_part,
             thread_rng(),
         )
         .expect("creating frost round1 package should not fail");
