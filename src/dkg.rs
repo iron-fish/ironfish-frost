@@ -248,6 +248,39 @@ mod tests {
     use crate::participant::Secret;
 
     #[test]
+    fn test_round1_checksum_stability() {
+        let mut rng = thread_rng();
+
+        let signing_participants = [
+            Secret::random(&mut rng).to_identity(),
+            Secret::random(&mut rng).to_identity(),
+            Secret::random(&mut rng).to_identity(),
+        ];
+
+        let min_signers1: u16 = 2;
+
+        let identity = &signing_participants[0];
+
+        let (_, package_1) = part1(
+            identity.clone(),
+            &signing_participants,
+            min_signers1,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let (_, package_2) = part1(
+            identity.clone(),
+            &signing_participants,
+            min_signers1,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        assert_eq!(package_1.checksum(), package_2.checksum());
+    }
+
+    #[test]
     fn test_round1_checksum_variation_with_min_signers() {
         let mut rng = thread_rng();
 
@@ -318,6 +351,56 @@ mod tests {
         .expect("creating frost round1 package should not fail");
 
         assert_ne!(package1.checksum(), package2.checksum());
+    }
+    #[test]
+    fn test_round2_checksum_stability() {
+        let mut rng = thread_rng();
+
+        let identity1 = Secret::random(&mut rng).to_identity();
+        let identity2 = Secret::random(&mut rng).to_identity();
+
+        let signing_participants = [identity1.clone(), identity2.clone()];
+
+        let min_signers: u16 = 2;
+
+        let (secret_package1, package1) = part1(
+            identity1.clone(),
+            &signing_participants,
+            min_signers,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let (secret_package2, package2) = part1(
+            identity2.clone(),
+            &signing_participants,
+            min_signers,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let round2_packages1 = part2(
+            identity1,
+            secret_package1,
+            &[package1.clone(), package2.clone()],
+        )
+        .expect("creating round2 packages should not fail");
+
+        assert_eq!(round2_packages1.len(), 1);
+
+        let round2_packages2 = part2(
+            identity2,
+            secret_package2,
+            &[package1.clone(), package2.clone()],
+        )
+        .expect("creating round2 packages should not fail");
+
+        assert_eq!(round2_packages2.len(), 1);
+
+        assert_eq!(
+            round2_packages1[0].checksum(),
+            round2_packages2[0].checksum()
+        )
     }
 
     #[test]
