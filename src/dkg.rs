@@ -151,7 +151,7 @@ mod round2 {
     use reddsa::frost::redjubjub::Error;
     use siphasher::sip::SipHasher24;
 
-    use crate::checksum::Checksum;
+    use crate::checksum::{Checksum, ChecksumError};
     use crate::frost::keys::dkg::round2 as frost_round2;
     use crate::participant::Identity;
 
@@ -199,6 +199,23 @@ mod round2 {
                 group_secret_key,
                 checksum,
             })
+        }
+
+        pub fn verify_checksum<P>(
+            &self,
+            packages: &[P],
+            group_secret_key: [u8; 32],
+        ) -> Result<(), ChecksumError>
+        where
+            P: Borrow<round1::Package>,
+        {
+            let computed_checksum =
+                input_checksum(packages, group_secret_key).map_err(|_| ChecksumError)?;
+            if self.checksum == computed_checksum {
+                Ok(())
+            } else {
+                Err(ChecksumError)
+            }
         }
 
         pub fn checksum(&self) -> Checksum {
