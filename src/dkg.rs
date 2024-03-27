@@ -161,10 +161,11 @@ mod round2 {
     pub struct Package {
         identity: Identity,
         frost_package: frost_round2::Package,
+        group_secret_key: [u8; 32],
         checksum: Checksum,
     }
 
-    fn input_checksum<P>(packages: &[P]) -> Result<Checksum, Error>
+    fn input_checksum<P>(packages: &[P], group_secret_key: [u8; 32]) -> Result<Checksum, Error>
     where
         P: Borrow<round1::Package>,
     {
@@ -178,6 +179,8 @@ mod round2 {
             hasher.write(&package.frost_package().serialize()?);
         }
 
+        hasher.write(&group_secret_key);
+
         Ok(hasher.finish())
     }
 
@@ -185,13 +188,15 @@ mod round2 {
         pub(crate) fn new(
             identity: Identity,
             round1_packages: &[round1::Package],
+            group_secret_key: [u8; 32],
             frost_package: frost_round2::Package,
         ) -> Result<Self, Error> {
-            let checksum = input_checksum(round1_packages)?;
+            let checksum = input_checksum(round1_packages, group_secret_key)?;
 
             Ok(Package {
                 identity,
                 frost_package,
+                group_secret_key,
                 checksum,
             })
         }
@@ -206,6 +211,7 @@ pub fn part2(
     identity: Identity,
     secret_package: frost_round1::SecretPackage,
     round1_packages: &[round1::Package],
+    group_secret_key: [u8; 32],
 ) -> Result<Vec<round2::Package>, Error> {
     let mut round1_frost_packages_map: BTreeMap<Identifier, frost_round1::Package> =
         BTreeMap::new();
@@ -240,6 +246,7 @@ pub fn part2(
         let round2_package = round2::Package::new(
             identity.clone(),
             round1_packages,
+            group_secret_key,
             round2_frost_package.clone(),
         )?;
 
@@ -375,6 +382,7 @@ mod tests {
 
         assert_ne!(package1.checksum(), package2.checksum());
     }
+
     #[test]
     fn test_round2_checksum_stability() {
         let mut rng = thread_rng();
@@ -406,10 +414,13 @@ mod tests {
         )
         .expect("creating frost round1 package should not fail");
 
+        let group_secret_key: [u8; 32] = random();
+
         let round2_packages1 = part2(
             identity1,
             secret_package1,
             &[package1.clone(), package2.clone()],
+            group_secret_key,
         )
         .expect("creating round2 packages should not fail");
 
@@ -419,6 +430,7 @@ mod tests {
             identity2,
             secret_package2,
             &[package1.clone(), package2.clone()],
+            group_secret_key,
         )
         .expect("creating round2 packages should not fail");
 
@@ -470,13 +482,85 @@ mod tests {
         )
         .expect("creating frost round1 package should not fail");
 
-        let round2_packages1 = part2(identity1, secret_package1, &[package1.clone(), package2a])
-            .expect("creating round2 packages should not fail");
+        let group_secret_key: [u8; 32] = random();
+
+        let round2_packages1 = part2(
+            identity1,
+            secret_package1,
+            &[package1.clone(), package2a],
+            group_secret_key,
+        )
+        .expect("creating round2 packages should not fail");
 
         assert_eq!(round2_packages1.len(), 1);
 
-        let round2_packages2 = part2(identity2, secret_package2a, &[package1.clone(), package2b])
-            .expect("creating round2 packages should not fail");
+        let round2_packages2 = part2(
+            identity2,
+            secret_package2a,
+            &[package1.clone(), package2b],
+            group_secret_key,
+        )
+        .expect("creating round2 packages should not fail");
+
+        assert_eq!(round2_packages2.len(), 1);
+
+        assert_ne!(
+            round2_packages1[0].checksum(),
+            round2_packages2[0].checksum()
+        )
+    }
+
+    #[test]
+    fn test_round2_checksum_variation_with_group_secret_key() {
+        let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
+
+        let identity1 = Secret::random(&mut rng).to_identity();
+        let identity2 = Secret::random(&mut rng).to_identity();
+
+        let signing_participants = [identity1.clone(), identity2.clone()];
+
+        let min_signers: u16 = 2;
+
+        let (secret_package1, package1) = part1(
+            identity1.clone(),
+            &signing_participants,
+            min_signers,
+            group_key_part,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let (secret_package2, package2) = part1(
+            identity2.clone(),
+            &signing_participants,
+            min_signers,
+            group_key_part,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let group_secret_key1: [u8; 32] = random();
+        let group_secret_key2: [u8; 32] = random();
+
+        let round2_packages1 = part2(
+            identity1,
+            secret_package1,
+            &[package1.clone(), package2.clone()],
+            group_secret_key1,
+        )
+        .expect("creating round2 packages should not fail");
+
+        assert_eq!(round2_packages1.len(), 1);
+
+        let round2_packages2 = part2(
+            identity2,
+            secret_package2,
+            &[package1.clone(), package2.clone()],
+            group_secret_key2,
+        )
+        .expect("creating round2 packages should not fail");
 
         assert_eq!(round2_packages2.len(), 1);
 
