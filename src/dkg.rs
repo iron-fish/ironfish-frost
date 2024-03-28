@@ -20,7 +20,7 @@ mod round1 {
 
     use siphasher::sip::SipHasher24;
 
-    use crate::checksum::{Checksum, ChecksumError};
+    use crate::checksum::Checksum;
     use crate::frost::keys::dkg::round1 as frost_round1;
     use crate::participant::Identity;
 
@@ -69,22 +69,6 @@ mod round1 {
                 frost_package,
                 group_key_part,
                 checksum,
-            }
-        }
-
-        pub fn verify_checksum<I>(
-            &self,
-            min_signers: u16,
-            signing_participants: &[I],
-        ) -> Result<(), ChecksumError>
-        where
-            I: Borrow<Identity>,
-        {
-            let computed_checksum = input_checksum(min_signers, signing_participants);
-            if self.checksum == computed_checksum {
-                Ok(())
-            } else {
-                Err(ChecksumError)
             }
         }
 
@@ -151,7 +135,7 @@ mod round2 {
     use reddsa::frost::redjubjub::Error;
     use siphasher::sip::SipHasher24;
 
-    use crate::checksum::{Checksum, ChecksumError};
+    use crate::checksum::Checksum;
     use crate::frost::keys::dkg::round2 as frost_round2;
     use crate::participant::Identity;
 
@@ -199,23 +183,6 @@ mod round2 {
                 group_secret_key,
                 checksum,
             })
-        }
-
-        pub fn verify_checksum<P>(
-            &self,
-            packages: &[P],
-            group_secret_key: [u8; 32],
-        ) -> Result<(), ChecksumError>
-        where
-            P: Borrow<round1::Package>,
-        {
-            let computed_checksum =
-                input_checksum(packages, group_secret_key).map_err(|_| ChecksumError)?;
-            if self.checksum == computed_checksum {
-                Ok(())
-            } else {
-                Err(ChecksumError)
-            }
         }
 
         pub fn checksum(&self) -> Checksum {
