@@ -35,6 +35,7 @@ mod round1 {
     #[derive(Clone, PartialEq, Eq, Debug)]
     pub struct SecretPackage {
         frost_secret_package: frost_round1::SecretPackage,
+        group_key_part: [u8; 32],
         checksum: Checksum,
     }
 
@@ -109,11 +110,13 @@ mod round1 {
         pub(crate) fn new(
             signing_participants: &[Identity],
             min_signers: u16,
+            group_key_part: [u8; 32],
             frost_secret_package: frost_round1::SecretPackage,
         ) -> Self {
             let checksum = input_checksum(min_signers, signing_participants);
 
             SecretPackage {
+                group_key_part,
                 frost_secret_package,
                 checksum,
             }
@@ -142,7 +145,12 @@ pub fn part1<T: RngCore + CryptoRng>(
     )?;
 
     Ok((
-        round1::SecretPackage::new(signing_participants, min_signers, frost_secret_package),
+        round1::SecretPackage::new(
+            signing_participants,
+            min_signers,
+            group_key_part,
+            frost_secret_package,
+        ),
         round1::Package::new(
             identity,
             signing_participants,
@@ -170,6 +178,12 @@ mod round2 {
     pub struct Package {
         identity: Identity,
         frost_package: frost_round2::Package,
+        group_secret_key: [u8; 32],
+        checksum: Checksum,
+    }
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub struct SecretPackage {
+        frost_secret_package: frost_round2::SecretPackage,
         group_secret_key: [u8; 32],
         checksum: Checksum,
     }
@@ -214,6 +228,22 @@ mod round2 {
             self.checksum
         }
     }
+
+    impl SecretPackage {
+        pub(crate) fn new(
+            round1_packages: &[round1::Package],
+            group_secret_key: [u8; 32],
+            frost_secret_package: frost_round2::SecretPackage,
+        ) -> Result<Self, Error> {
+            let checksum = input_checksum(round1_packages, group_secret_key)?;
+
+            Ok(SecretPackage {
+                frost_secret_package,
+                group_secret_key,
+                checksum,
+            })
+        }
+    }
 }
 
 pub fn part2(
@@ -221,7 +251,7 @@ pub fn part2(
     secret_package: &round1::SecretPackage,
     round1_packages: &[round1::Package],
     group_secret_key: [u8; 32],
-) -> Result<Vec<round2::Package>, Error> {
+) -> Result<(round2::SecretPackage, Vec<round2::Package>), Error> {
     let mut round1_frost_packages_map: BTreeMap<Identifier, frost_round1::Package> =
         BTreeMap::new();
 
@@ -243,10 +273,13 @@ pub fn part2(
         );
     }
 
-    let (_, round2_frost_packages_map) = frost_part2(
+    let (frost_secret_package, round2_frost_packages_map) = frost_part2(
         secret_package.frost_secret_package().clone(),
         &round1_frost_packages_map,
     )?;
+
+    let secret_package: round2::SecretPackage =
+        round2::SecretPackage::new(round1_packages, group_secret_key, frost_secret_package)?;
 
     let mut round2_packages: Vec<round2::Package> = Vec::new();
 
@@ -265,7 +298,7 @@ pub fn part2(
         round2_packages.push(round2_package);
     }
 
-    Ok(round2_packages)
+    Ok((secret_package, round2_packages))
 }
 
 #[cfg(test)]
@@ -428,7 +461,7 @@ mod tests {
 
         let group_secret_key: [u8; 32] = random();
 
-        let round2_packages1 = part2(
+        let (_, round2_packages1) = part2(
             identity1,
             &secret_package1,
             &[package1.clone(), package2.clone()],
@@ -438,7 +471,7 @@ mod tests {
 
         assert_eq!(round2_packages1.len(), 1);
 
-        let round2_packages2 = part2(
+        let (_, round2_packages2) = part2(
             identity2,
             &secret_package2,
             &[package1.clone(), package2.clone()],
@@ -496,7 +529,7 @@ mod tests {
 
         let group_secret_key: [u8; 32] = random();
 
-        let round2_packages1 = part2(
+        let (_, round2_packages1) = part2(
             identity1,
             &secret_package1,
             &[package1.clone(), package2a],
@@ -506,7 +539,7 @@ mod tests {
 
         assert_eq!(round2_packages1.len(), 1);
 
-        let round2_packages2 = part2(
+        let (_, round2_packages2) = part2(
             identity2,
             &secret_package2a,
             &[package1.clone(), package2b],
@@ -556,7 +589,7 @@ mod tests {
         let group_secret_key1: [u8; 32] = random();
         let group_secret_key2: [u8; 32] = random();
 
-        let round2_packages1 = part2(
+        let (_, round2_packages1) = part2(
             identity1,
             &secret_package1,
             &[package1.clone(), package2.clone()],
@@ -566,7 +599,7 @@ mod tests {
 
         assert_eq!(round2_packages1.len(), 1);
 
-        let round2_packages2 = part2(
+        let (_, round2_packages2) = part2(
             identity2,
             &secret_package2,
             &[package1.clone(), package2.clone()],
