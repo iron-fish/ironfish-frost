@@ -9,10 +9,14 @@ use std::fmt;
 use crate::checksum::ChecksumError;
 use crate::frost::keys::dkg::part1 as frost_part1;
 use crate::frost::keys::dkg::part2 as frost_part2;
+use crate::frost::keys::dkg::part3 as frost_part3;
 use crate::frost::keys::dkg::round1 as frost_round1;
+use crate::frost::keys::dkg::round2 as frost_round2;
 use crate::participant::Identity;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
+use reddsa::frost::redjubjub::keys::KeyPackage;
+use reddsa::frost::redjubjub::keys::PublicKeyPackage;
 use reddsa::frost::redjubjub::Error as FrostError;
 use reddsa::frost::redjubjub::Identifier;
 
@@ -217,7 +221,7 @@ mod round2 {
     use reddsa::frost::redjubjub::Error;
     use siphasher::sip::SipHasher24;
 
-    use crate::checksum::Checksum;
+    use crate::checksum::{Checksum, ChecksumError};
     use crate::frost::keys::dkg::round2 as frost_round2;
     use crate::participant::Identity;
 
@@ -276,6 +280,14 @@ mod round2 {
         pub fn checksum(&self) -> Checksum {
             self.checksum
         }
+
+        pub fn identity(&self) -> &Identity {
+            &self.identity
+        }
+
+        pub fn frost_package(&self) -> &frost_round2::Package {
+            &self.frost_package
+        }
     }
 
     impl SecretPackage {
@@ -291,6 +303,18 @@ mod round2 {
                 group_secret_key,
                 checksum,
             })
+        }
+
+        pub(crate) fn frost_secret_package(&self) -> &frost_round2::SecretPackage {
+            &self.frost_secret_package
+        }
+
+        pub fn verify_package_checksum(&self, package: &Package) -> Result<(), ChecksumError> {
+            if self.checksum != package.checksum() {
+                Err(ChecksumError)
+            } else {
+                Ok(())
+            }
         }
     }
 }
@@ -352,6 +376,50 @@ pub fn part2(
     Ok((secret_package, round2_packages))
 }
 
+pub fn part3(
+    identity: Identity,
+    secret_package: &round2::SecretPackage,
+    round1_packages: &[round1::Package],
+    round2_packages: &[round2::Package],
+) -> Result<(KeyPackage, PublicKeyPackage), DkgError> {
+    let mut round1_frost_packages_map: BTreeMap<Identifier, frost_round1::Package> =
+        BTreeMap::new();
+    let mut round2_frost_packages_map: BTreeMap<Identifier, frost_round2::Package> =
+        BTreeMap::new();
+
+    for package in round1_packages {
+        if package.identity() == &identity {
+            continue;
+        }
+
+        round1_frost_packages_map.insert(
+            package.identity().to_frost_identifier(),
+            package.frost_package().clone(),
+        );
+    }
+
+    for package in round2_packages {
+        if package.identity() == &identity {
+            continue;
+        }
+
+        secret_package.verify_package_checksum(package)?;
+
+        round2_frost_packages_map.insert(
+            package.identity().to_frost_identifier(),
+            package.frost_package().clone(),
+        );
+    }
+
+    let (key_package, public_key_package) = frost_part3(
+        secret_package.frost_secret_package(),
+        &round1_frost_packages_map,
+        &round2_frost_packages_map,
+    )?;
+
+    Ok((key_package, public_key_package))
+}
+
 #[cfg(test)]
 mod tests {
     use rand::random;
@@ -360,6 +428,8 @@ mod tests {
     use crate::dkg::part1;
     use crate::dkg::part2;
     use crate::participant::Secret;
+
+    use super::part3;
 
     #[test]
     fn test_round1_checksum_stability() {
@@ -710,5 +780,64 @@ mod tests {
             round2_packages1[0].checksum(),
             round2_packages2[0].checksum()
         )
+    }
+
+    #[test]
+    fn test_part3_checksum_verification() {
+        let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
+
+        let identity1 = Secret::random(&mut rng).to_identity();
+        let identity2 = Secret::random(&mut rng).to_identity();
+
+        let signing_participants = [identity1.clone(), identity2.clone()];
+
+        let min_signers: u16 = 2;
+
+        let (secret_package1, package1) = part1(
+            identity1.clone(),
+            &signing_participants,
+            min_signers,
+            group_key_part,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let (secret_package2, package2) = part1(
+            identity2.clone(),
+            &signing_participants,
+            min_signers,
+            group_key_part,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let group_secret_key1: [u8; 32] = random();
+        let group_secret_key2: [u8; 32] = random();
+
+        let (round2_secret_package, _) = part2(
+            identity1.clone(),
+            &secret_package1,
+            &[package1.clone(), package2.clone()],
+            group_secret_key1,
+        )
+        .expect("creating round2 packages should not fail");
+
+        let (_, round2_packages2) = part2(
+            identity2,
+            &secret_package2,
+            &[package1.clone(), package2.clone()],
+            group_secret_key2,
+        )
+        .expect("creating round2 packages should not fail");
+
+        part3(
+            identity1.clone(),
+            &round2_secret_package,
+            &[package1.clone(), package2.clone()],
+            &round2_packages2,
+        )
+        .expect_err("should fail checksum validation if group secret keys do not match");
     }
 }
