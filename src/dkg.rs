@@ -32,6 +32,12 @@ mod round1 {
         checksum: Checksum,
     }
 
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    pub struct SecretPackage {
+        frost_secret_package: frost_round1::SecretPackage,
+        checksum: Checksum,
+    }
+
     #[must_use]
     fn input_checksum<I>(min_signers: u16, signing_participants: &[I]) -> Checksum
     where
@@ -98,6 +104,25 @@ mod round1 {
             Some(self.cmp(other))
         }
     }
+
+    impl SecretPackage {
+        pub(crate) fn new(
+            signing_participants: &[Identity],
+            min_signers: u16,
+            frost_secret_package: frost_round1::SecretPackage,
+        ) -> Self {
+            let checksum = input_checksum(min_signers, signing_participants);
+
+            SecretPackage {
+                frost_secret_package,
+                checksum,
+            }
+        }
+
+        pub(crate) fn frost_secret_package(&self) -> &frost_round1::SecretPackage {
+            &self.frost_secret_package
+        }
+    }
 }
 
 pub fn part1<T: RngCore + CryptoRng>(
@@ -106,10 +131,10 @@ pub fn part1<T: RngCore + CryptoRng>(
     min_signers: u16,
     group_key_part: [u8; 32],
     rng: T,
-) -> Result<(frost_round1::SecretPackage, round1::Package), Error> {
+) -> Result<(round1::SecretPackage, round1::Package), Error> {
     let max_signers = signing_participants.len() as u16;
 
-    let (secret_package, frost_package) = frost_part1(
+    let (frost_secret_package, frost_package) = frost_part1(
         identity.to_frost_identifier(),
         max_signers,
         min_signers,
@@ -117,7 +142,7 @@ pub fn part1<T: RngCore + CryptoRng>(
     )?;
 
     Ok((
-        secret_package,
+        round1::SecretPackage::new(signing_participants, min_signers, frost_secret_package),
         round1::Package::new(
             identity,
             signing_participants,
@@ -193,7 +218,7 @@ mod round2 {
 
 pub fn part2(
     identity: Identity,
-    secret_package: frost_round1::SecretPackage,
+    secret_package: &round1::SecretPackage,
     round1_packages: &[round1::Package],
     group_secret_key: [u8; 32],
 ) -> Result<Vec<round2::Package>, Error> {
@@ -218,7 +243,10 @@ pub fn part2(
         );
     }
 
-    let (_, round2_frost_packages_map) = frost_part2(secret_package, &round1_frost_packages_map)?;
+    let (_, round2_frost_packages_map) = frost_part2(
+        secret_package.frost_secret_package().clone(),
+        &round1_frost_packages_map,
+    )?;
 
     let mut round2_packages: Vec<round2::Package> = Vec::new();
 
@@ -402,7 +430,7 @@ mod tests {
 
         let round2_packages1 = part2(
             identity1,
-            secret_package1,
+            &secret_package1,
             &[package1.clone(), package2.clone()],
             group_secret_key,
         )
@@ -412,7 +440,7 @@ mod tests {
 
         let round2_packages2 = part2(
             identity2,
-            secret_package2,
+            &secret_package2,
             &[package1.clone(), package2.clone()],
             group_secret_key,
         )
@@ -470,7 +498,7 @@ mod tests {
 
         let round2_packages1 = part2(
             identity1,
-            secret_package1,
+            &secret_package1,
             &[package1.clone(), package2a],
             group_secret_key,
         )
@@ -480,7 +508,7 @@ mod tests {
 
         let round2_packages2 = part2(
             identity2,
-            secret_package2a,
+            &secret_package2a,
             &[package1.clone(), package2b],
             group_secret_key,
         )
@@ -530,7 +558,7 @@ mod tests {
 
         let round2_packages1 = part2(
             identity1,
-            secret_package1,
+            &secret_package1,
             &[package1.clone(), package2.clone()],
             group_secret_key1,
         )
@@ -540,7 +568,7 @@ mod tests {
 
         let round2_packages2 = part2(
             identity2,
-            secret_package2,
+            &secret_package2,
             &[package1.clone(), package2.clone()],
             group_secret_key2,
         )
