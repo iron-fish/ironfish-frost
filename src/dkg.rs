@@ -3,15 +3,55 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::collections::BTreeMap;
+use std::error;
+use std::fmt;
 
+use crate::checksum::ChecksumError;
 use crate::frost::keys::dkg::part1 as frost_part1;
 use crate::frost::keys::dkg::part2 as frost_part2;
 use crate::frost::keys::dkg::round1 as frost_round1;
 use crate::participant::Identity;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use reddsa::frost::redjubjub::Error;
+use reddsa::frost::redjubjub::Error as FrostError;
 use reddsa::frost::redjubjub::Identifier;
+
+#[derive(Clone, Debug)]
+pub enum DkgError {
+    Checksum(ChecksumError),
+    Frost(FrostError),
+}
+
+impl fmt::Display for DkgError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            DkgError::Checksum(ref e) => e.fmt(f),
+            DkgError::Frost(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl error::Error for DkgError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            DkgError::Checksum(ref e) => Some(e),
+            DkgError::Frost(ref e) => Some(e),
+        }
+    }
+}
+
+impl From<FrostError> for DkgError {
+    fn from(e: FrostError) -> DkgError {
+        DkgError::Frost(e)
+    }
+}
+
+impl From<ChecksumError> for DkgError {
+    fn from(e: ChecksumError) -> DkgError {
+        DkgError::Checksum(e)
+    }
+}
 
 mod round1 {
     use std::borrow::Borrow;
@@ -134,7 +174,7 @@ pub fn part1<T: RngCore + CryptoRng>(
     min_signers: u16,
     group_key_part: [u8; 32],
     rng: T,
-) -> Result<(round1::SecretPackage, round1::Package), Error> {
+) -> Result<(round1::SecretPackage, round1::Package), DkgError> {
     let max_signers = signing_participants.len() as u16;
 
     let (frost_secret_package, frost_package) = frost_part1(
@@ -251,7 +291,7 @@ pub fn part2(
     secret_package: &round1::SecretPackage,
     round1_packages: &[round1::Package],
     group_secret_key: [u8; 32],
-) -> Result<(round2::SecretPackage, Vec<round2::Package>), Error> {
+) -> Result<(round2::SecretPackage, Vec<round2::Package>), DkgError> {
     let mut round1_frost_packages_map: BTreeMap<Identifier, frost_round1::Package> =
         BTreeMap::new();
 
