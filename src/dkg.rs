@@ -61,6 +61,7 @@ mod round1 {
     use siphasher::sip::SipHasher24;
 
     use crate::checksum::Checksum;
+    use crate::checksum::ChecksumError;
     use crate::frost::keys::dkg::round1 as frost_round1;
     use crate::participant::Identity;
 
@@ -164,6 +165,14 @@ mod round1 {
 
         pub(crate) fn frost_secret_package(&self) -> &frost_round1::SecretPackage {
             &self.frost_secret_package
+        }
+
+        pub fn verify_package_checksum(&self, package: &Package) -> Result<(), ChecksumError> {
+            if self.checksum != package.checksum() {
+                Err(ChecksumError)
+            } else {
+                Ok(())
+            }
         }
     }
 }
@@ -301,6 +310,8 @@ pub fn part2(
         if package.identity() == &identity {
             continue;
         }
+
+        secret_package.verify_package_checksum(package)?;
 
         round1_frost_packages_map.insert(
             package.identity().to_frost_identifier(),
@@ -466,6 +477,52 @@ mod tests {
         .expect("creating frost round1 package should not fail");
 
         assert_ne!(package1.checksum(), package2.checksum());
+    }
+
+    #[test]
+    fn test_part1_checksum_verification() {
+        let mut rng = thread_rng();
+
+        let group_key_part: [u8; 32] = random();
+
+        let signing_participants = [
+            Secret::random(&mut rng).to_identity(),
+            Secret::random(&mut rng).to_identity(),
+            Secret::random(&mut rng).to_identity(),
+        ];
+
+        let min_signers1: u16 = 2;
+        let min_signers2: u16 = 3;
+
+        let identity = &signing_participants[0];
+
+        let (secret_package, package_1) = part1(
+            identity.clone(),
+            &signing_participants,
+            min_signers1,
+            group_key_part,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let (_, package_2) = part1(
+            identity.clone(),
+            &signing_participants,
+            min_signers2,
+            group_key_part,
+            thread_rng(),
+        )
+        .expect("creating frost round1 package should not fail");
+
+        let group_secret_key: [u8; 32] = random();
+
+        part2(
+            identity.clone(),
+            &secret_package,
+            &[package_1, package_2],
+            group_secret_key,
+        )
+        .expect_err("checksum verification should fail for mismatched package checksums");
     }
 
     #[test]
