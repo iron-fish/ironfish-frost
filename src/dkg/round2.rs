@@ -120,6 +120,7 @@ pub fn import_secret_package(
 pub mod round2 {
     use std::borrow::Borrow;
     use std::hash::Hasher;
+    use std::io;
 
     use reddsa::frost::redjubjub::Error;
     use siphasher::sip::SipHasher24;
@@ -183,6 +184,20 @@ pub mod round2 {
 
         pub fn frost_package(&self) -> &frost_round2::Package {
             &self.frost_package
+        }
+
+        pub fn serialize(&self) -> io::Result<Vec<u8>> {
+            let mut buf = Vec::new();
+            self.serialize_into(&mut buf)?;
+            Ok(buf)
+        }
+
+        pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+            self.identity.serialize_into(&mut writer)?;
+            writer.write_all(&self.frost_package.serialize().map_err(io::Error::other)?)?;
+            writer.write_all(&self.group_secret_key)?;
+            writer.write_all(&self.checksum.to_le_bytes())?;
+            Ok(())
         }
     }
 }
