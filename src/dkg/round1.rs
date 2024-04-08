@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::frost::keys::dkg::part1 as frost_part1;
-use crate::frost::keys::dkg::round1::SecretPackage;
+use crate::frost::keys::dkg::round1::SecretPackage as RoundOneSecretPackage;
 use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
@@ -25,9 +25,11 @@ use super::utils::DkgError;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
+pub type SecretPackage = RoundOneSecretPackage;
+
 /// Copy of the [`frost_core::dkg::round1::SecretPackage`] struct. Necessary to implement
 /// serialization for this struct. This must be kept in sync with the upstream version.
-struct SerializableSecretPackage {
+pub struct SerializableSecretPackage {
     identifier: Identifier,
     coefficients: Vec<Scalar>,
     commitment: VerifiableSecretSharingCommitment,
@@ -146,13 +148,6 @@ pub mod round1 {
         checksum: Checksum,
     }
 
-    #[derive(Clone, PartialEq, Eq, Debug)]
-    pub struct SecretPackage {
-        frost_secret_package: frost_round1::SecretPackage,
-        group_key_part: [u8; 32],
-        checksum: Checksum,
-    }
-
     #[must_use]
     fn input_checksum<I>(min_signers: u16, signing_participants: &[I]) -> Checksum
     where
@@ -231,35 +226,6 @@ pub mod round1 {
         #[inline]
         fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
             Some(self.cmp(other))
-        }
-    }
-
-    impl SecretPackage {
-        pub(crate) fn new(
-            signing_participants: &[Identity],
-            min_signers: u16,
-            group_key_part: [u8; 32],
-            frost_secret_package: frost_round1::SecretPackage,
-        ) -> Self {
-            let checksum = input_checksum(min_signers, signing_participants);
-
-            SecretPackage {
-                group_key_part,
-                frost_secret_package,
-                checksum,
-            }
-        }
-
-        pub(crate) fn frost_secret_package(&self) -> &frost_round1::SecretPackage {
-            &self.frost_secret_package
-        }
-
-        pub fn verify_package_checksum(&self, package: &Package) -> Result<(), ChecksumError> {
-            if self.checksum != package.checksum() {
-                Err(ChecksumError)
-            } else {
-                Ok(())
-            }
         }
     }
 }

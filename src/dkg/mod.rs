@@ -26,7 +26,7 @@ pub fn part1<T: RngCore + CryptoRng>(
     min_signers: u16,
     group_key_part: [u8; 32],
     rng: T,
-) -> Result<(round1::round1::SecretPackage, round1::round1::Package), utils::DkgError> {
+) -> Result<(round1::SecretPackage, round1::round1::Package), utils::DkgError> {
     let max_signers = signing_participants.len() as u16;
 
     let (frost_secret_package, frost_package) = frost_part1(
@@ -37,12 +37,7 @@ pub fn part1<T: RngCore + CryptoRng>(
     )?;
 
     Ok((
-        round1::round1::SecretPackage::new(
-            signing_participants,
-            min_signers,
-            group_key_part,
-            frost_secret_package,
-        ),
+        frost_secret_package,
         round1::round1::Package::new(
             identity,
             signing_participants,
@@ -55,7 +50,7 @@ pub fn part1<T: RngCore + CryptoRng>(
 
 pub fn part2(
     identity: Identity,
-    secret_package: &round1::round1::SecretPackage,
+    secret_package: &round1::SecretPackage,
     round1_packages: &[round1::round1::Package],
     group_secret_key: [u8; 32],
 ) -> Result<(round2::round2::SecretPackage, Vec<round2::round2::Package>), utils::DkgError> {
@@ -69,7 +64,8 @@ pub fn part2(
             continue;
         }
 
-        secret_package.verify_package_checksum(package)?;
+        // TODO: Verify where this should be checked
+        // secret_package.verify_package_checksum(package)?;
 
         round1_frost_packages_map.insert(
             package.identity().to_frost_identifier(),
@@ -83,7 +79,7 @@ pub fn part2(
     }
 
     let (frost_secret_package, round2_frost_packages_map) = frost_part2(
-        secret_package.frost_secret_package().clone(),
+        secret_package.clone(),
         &round1_frost_packages_map,
     )?;
 
