@@ -78,8 +78,7 @@ impl SerializableSecretPackage {
 
         let mut secret_share = [0u8; 32];
         reader.read_exact(&mut secret_share)?;
-        let secret_share: Scalar =
-            Scalar::from_bytes(&secret_share).expect("secret_share deserialization failed");
+        let secret_share: Scalar = Scalar::from_bytes(&secret_share).unwrap();
 
         let min_signers = read_u16(&mut reader)?;
         let max_signers = read_u16(&mut reader)?;
