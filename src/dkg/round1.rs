@@ -129,6 +129,7 @@ pub mod round1 {
     use std::borrow::Borrow;
     use std::cmp;
     use std::hash::Hasher;
+    use std::io;
 
     use siphasher::sip::SipHasher24;
 
@@ -202,6 +203,20 @@ pub mod round1 {
 
         pub fn checksum(&self) -> Checksum {
             self.checksum
+        }
+
+        pub fn serialize(&self) -> io::Result<Vec<u8>> {
+            let mut buf = Vec::new();
+            self.serialize_into(&mut buf)?;
+            Ok(buf)
+        }
+
+        pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+            self.identity.serialize_into(&mut writer)?;
+            writer.write_all(&self.frost_package.serialize().map_err(io::Error::other)?)?;
+            writer.write_all(&self.group_key_part)?;
+            writer.write_all(&self.checksum.to_le_bytes())?;
+            Ok(())
         }
     }
 
