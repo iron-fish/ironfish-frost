@@ -133,12 +133,16 @@ pub mod round1 {
     use std::hash::Hasher;
     use std::io;
 
+    use reddsa::frost;
     use siphasher::sip::SipHasher24;
 
+    use crate::checksum;
     use crate::checksum::Checksum;
     use crate::checksum::ChecksumError;
+    use crate::checksum::CHECKSUM_LEN;
     use crate::frost::keys::dkg::round1 as frost_round1;
     use crate::participant::Identity;
+    use crate::serde::read_variable_length_bytes;
 
     #[derive(Clone, PartialEq, Eq, Debug)]
     pub struct Package {
@@ -212,6 +216,28 @@ pub mod round1 {
             writer.write_all(&self.group_key_part)?;
             writer.write_all(&self.checksum.to_le_bytes())?;
             Ok(())
+        }
+
+        fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+            let identity = Identity::deserialize_from(&mut reader).map_err(io::Error::other)?;
+
+            let frost_package = read_variable_length_bytes(&mut reader)?;
+            let frost_package =
+                frost_round1::Package::deserialize(&frost_package).map_err(io::Error::other)?;
+
+            let mut group_key_part = [0u8; 32];
+            reader.read_exact(&mut group_key_part)?;
+
+            let mut checksum = [0u8; CHECKSUM_LEN];
+            reader.read_exact(&mut checksum)?;
+            let checksum = u64::from_le_bytes(checksum);
+
+            Ok(Self {
+                identity,
+                frost_package,
+                group_key_part,
+                checksum,
+            })
         }
     }
 
