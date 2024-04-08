@@ -53,7 +53,7 @@ pub fn part2(
     secret_package: &round1::SecretPackage,
     round1_packages: &[round1::round1::Package],
     group_secret_key: [u8; 32],
-) -> Result<(round2::round2::SecretPackage, Vec<round2::round2::Package>), utils::DkgError> {
+) -> Result<(round2::SecretPackage, Vec<round2::round2::Package>), utils::DkgError> {
     let mut round1_frost_packages_map: BTreeMap<Identifier, frost_round1::Package> =
         BTreeMap::new();
 
@@ -78,16 +78,8 @@ pub fn part2(
         );
     }
 
-    let (frost_secret_package, round2_frost_packages_map) = frost_part2(
-        secret_package.clone(),
-        &round1_frost_packages_map,
-    )?;
-
-    let secret_package: round2::round2::SecretPackage = round2::round2::SecretPackage::new(
-        round1_packages,
-        group_secret_key,
-        frost_secret_package,
-    )?;
+    let (secret_package, round2_frost_packages_map) =
+        frost_part2(secret_package.clone(), &round1_frost_packages_map)?;
 
     let mut round2_packages: Vec<round2::round2::Package> = Vec::new();
 
@@ -111,7 +103,7 @@ pub fn part2(
 
 pub fn part3(
     identity: Identity,
-    secret_package: &round2::round2::SecretPackage,
+    secret_package: &round2::SecretPackage,
     round1_packages: &[round1::round1::Package],
     round2_packages: &[round2::round2::Package],
 ) -> Result<(KeyPackage, PublicKeyPackage), utils::DkgError> {
@@ -136,7 +128,8 @@ pub fn part3(
             continue;
         }
 
-        secret_package.verify_package_checksum(package)?;
+        // TODO: Verify where this should be checked
+        // secret_package.verify_package_checksum(package)?;
 
         round2_frost_packages_map.insert(
             package.identity().to_frost_identifier(),
@@ -145,7 +138,7 @@ pub fn part3(
     }
 
     let (key_package, public_key_package) = frost_part3(
-        secret_package.frost_secret_package(),
+        secret_package,
         &round1_frost_packages_map,
         &round2_frost_packages_map,
     )?;
