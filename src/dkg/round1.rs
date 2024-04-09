@@ -6,7 +6,7 @@ use crate::checksum::Checksum;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
 use crate::frost;
-use crate::frost::keys::dkg::round1::Package as FrostPackage;
+use crate::frost::keys::dkg::round1::Package;
 use crate::frost::keys::dkg::round1::SecretPackage;
 use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
@@ -156,24 +156,24 @@ where
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Package {
+pub struct PublicPackage {
     identity: Identity,
-    frost_package: FrostPackage,
+    frost_package: Package,
     group_secret_key_part: [u8; 32],
     checksum: Checksum,
 }
 
-impl Package {
+impl PublicPackage {
     pub fn new(
         identity: Identity,
         min_signers: u16,
         signing_participants: &[Identity],
-        frost_package: FrostPackage,
+        frost_package: Package,
         group_secret_key_part: [u8; 32],
     ) -> Self {
         let checksum = input_checksum(min_signers, signing_participants);
 
-        Package {
+        PublicPackage {
             identity,
             frost_package,
             group_secret_key_part,
@@ -185,7 +185,7 @@ impl Package {
         &self.identity
     }
 
-    pub fn frost_package(&self) -> &FrostPackage {
+    pub fn frost_package(&self) -> &Package {
         &self.frost_package
     }
 
@@ -216,7 +216,7 @@ impl Package {
         let identity = Identity::deserialize_from(&mut reader).expect("reading identity failed");
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
-        let frost_package = FrostPackage::deserialize(&frost_package).map_err(io::Error::other)?;
+        let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
         let mut group_secret_key_part = [0u8; 32];
         reader.read_exact(&mut group_secret_key_part)?;
@@ -438,7 +438,7 @@ mod tests {
 
         let group_secret_key_part: [u8; 32] = random();
 
-        let package = Package::new(
+        let public_package = PublicPackage::new(
             identity.clone(),
             min_signers,
             &signing_participants,
@@ -448,7 +448,7 @@ mod tests {
 
         let checksum = input_checksum(min_signers, &signing_participants);
 
-        assert_eq!(checksum, package.checksum());
+        assert_eq!(checksum, public_package.checksum());
     }
 
     #[test]
@@ -477,7 +477,7 @@ mod tests {
 
         let group_secret_key_part: [u8; 32] = random();
 
-        let package = Package::new(
+        let public_package = PublicPackage::new(
             identity.clone(),
             min_signers,
             &signing_participants,
@@ -485,12 +485,12 @@ mod tests {
             group_secret_key_part,
         );
 
-        let serialized = package.serialize();
+        let serialized = public_package.serialize();
 
-        let deserialized =
-            Package::deserialize_from(&serialized[..]).expect("package deserialization failed");
+        let deserialized = PublicPackage::deserialize_from(&serialized[..])
+            .expect("package deserialization failed");
 
-        assert_eq!(package, deserialized);
+        assert_eq!(public_package, deserialized);
     }
 
     #[test]
