@@ -20,6 +20,7 @@ use crate::serde::read_variable_length;
 use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
+use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use siphasher::sip::SipHasher24;
@@ -196,28 +197,29 @@ impl Package {
         self.checksum
     }
 
-    pub fn serialize(&self) -> io::Result<Vec<u8>> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.serialize_into(&mut buf)?;
-        Ok(buf)
+        self.serialize_into(&mut buf).expect("serialization failed");
+        buf
     }
 
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         self.identity.serialize_into(&mut writer)?;
-        writer.write_all(&self.frost_package.serialize().map_err(io::Error::other)?)?;
+        let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
+        write_variable_length_bytes(&mut writer, &frost_package)?;
         writer.write_all(&self.group_secret_key_part)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
-        let identity = Identity::deserialize_from(&mut reader).map_err(io::Error::other)?;
+        let identity = Identity::deserialize_from(&mut reader).expect("reading identity failed");
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = FrostPackage::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let mut group_key_part = [0u8; 32];
-        reader.read_exact(&mut group_key_part)?;
+        let mut group_secret_key_part = [0u8; 32];
+        reader.read_exact(&mut group_secret_key_part)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -226,7 +228,7 @@ impl Package {
         Ok(Self {
             identity,
             frost_package,
-            group_secret_key_part: group_key_part,
+            group_secret_key_part,
             checksum,
         })
     }
@@ -447,6 +449,48 @@ mod tests {
         let checksum = input_checksum(min_signers, &signing_participants);
 
         assert_eq!(checksum, package.checksum());
+    }
+
+    #[test]
+    fn test_round1_package_serialization() {
+        let mut rng = thread_rng();
+
+        let min_signers: u16 = 2;
+
+        let signing_participants = [
+            Secret::random(&mut rng).to_identity(),
+            Secret::random(&mut rng).to_identity(),
+            Secret::random(&mut rng).to_identity(),
+        ];
+
+        let max_signers: u16 = signing_participants.len() as u16;
+
+        let identity = &signing_participants[0];
+
+        let (_, frost_package) = frost::keys::dkg::part1(
+            identity.to_frost_identifier(),
+            max_signers,
+            min_signers,
+            rng,
+        )
+        .expect("dkg round1 failed");
+
+        let group_secret_key_part: [u8; 32] = random();
+
+        let package = Package::new(
+            identity.clone(),
+            min_signers,
+            &signing_participants,
+            frost_package,
+            group_secret_key_part,
+        );
+
+        let serialized = package.serialize();
+
+        let deserialized =
+            Package::deserialize_from(&serialized[..]).expect("package deserialization failed");
+
+        assert_eq!(package, deserialized);
     }
 
     #[test]
