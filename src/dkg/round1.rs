@@ -159,7 +159,7 @@ where
 pub struct PublicPackage {
     identity: Identity,
     frost_package: Package,
-    group_secret_key_part: [u8; 32],
+    group_secret_key_shard: [u8; 32],
     checksum: Checksum,
 }
 
@@ -169,14 +169,14 @@ impl PublicPackage {
         min_signers: u16,
         signing_participants: &[Identity],
         frost_package: Package,
-        group_secret_key_part: [u8; 32],
+        group_secret_key_shard: [u8; 32],
     ) -> Self {
         let checksum = input_checksum(min_signers, signing_participants);
 
         PublicPackage {
             identity,
             frost_package,
-            group_secret_key_part,
+            group_secret_key_shard,
             checksum,
         }
     }
@@ -189,8 +189,8 @@ impl PublicPackage {
         &self.frost_package
     }
 
-    pub fn group_secret_key_part(&self) -> [u8; 32] {
-        self.group_secret_key_part
+    pub fn group_secret_key_shard(&self) -> [u8; 32] {
+        self.group_secret_key_shard
     }
 
     pub fn checksum(&self) -> Checksum {
@@ -207,7 +207,7 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.group_secret_key_part)?;
+        writer.write_all(&self.group_secret_key_shard)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -218,8 +218,8 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let mut group_secret_key_part = [0u8; 32];
-        reader.read_exact(&mut group_secret_key_part)?;
+        let mut group_secret_key_shard = [0u8; 32];
+        reader.read_exact(&mut group_secret_key_shard)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -228,7 +228,7 @@ impl PublicPackage {
         Ok(Self {
             identity,
             frost_package,
-            group_secret_key_part,
+            group_secret_key_shard,
             checksum,
         })
     }
@@ -436,14 +436,14 @@ mod tests {
         )
         .expect("dkg round1 failed");
 
-        let group_secret_key_part: [u8; 32] = random();
+        let group_secret_key_shard: [u8; 32] = random();
 
         let public_package = PublicPackage::new(
             identity.clone(),
             min_signers,
             &signing_participants,
             frost_package,
-            group_secret_key_part,
+            group_secret_key_shard,
         );
 
         let checksum = input_checksum(min_signers, &signing_participants);
@@ -475,14 +475,14 @@ mod tests {
         )
         .expect("dkg round1 failed");
 
-        let group_secret_key_part: [u8; 32] = random();
+        let group_secret_key_shard: [u8; 32] = random();
 
         let public_package = PublicPackage::new(
             identity.clone(),
             min_signers,
             &signing_participants,
             frost_package,
-            group_secret_key_part,
+            group_secret_key_shard,
         );
 
         let serialized = public_package.serialize();
