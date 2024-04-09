@@ -4,6 +4,7 @@
 
 use crate::checksum::Checksum;
 use crate::checksum::ChecksumError;
+use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
 use crate::frost::keys::SigningShare;
 use crate::frost::round1::NonceCommitment;
@@ -14,7 +15,6 @@ use crate::participant::Secret;
 use crate::participant::Signature;
 use crate::participant::SignatureError;
 use crate::participant::IDENTITY_LEN;
-use siphasher::sip::SipHasher24;
 use std::borrow::Borrow;
 use std::hash::Hasher;
 use std::io;
@@ -35,7 +35,7 @@ where
     signing_participants.sort_unstable();
     signing_participants.dedup();
 
-    let mut hasher = SipHasher24::new();
+    let mut hasher = ChecksumHasher::new();
     hasher.write(transaction_hash);
 
     for id in signing_participants {

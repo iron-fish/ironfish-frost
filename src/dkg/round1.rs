@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::checksum::Checksum;
+use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package as FrostPackage;
@@ -23,7 +24,6 @@ use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use siphasher::sip::SipHasher24;
 use std::borrow::Borrow;
 use std::fmt;
 use std::hash::Hasher;
@@ -137,7 +137,7 @@ fn input_checksum<I>(min_signers: u16, signing_participants: &[I]) -> Checksum
 where
     I: Borrow<Identity>,
 {
-    let mut hasher = SipHasher24::new();
+    let mut hasher = ChecksumHasher::new();
 
     hasher.write(&min_signers.to_le_bytes());
 
