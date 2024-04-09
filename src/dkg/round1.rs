@@ -164,7 +164,7 @@ pub struct PublicPackage {
 }
 
 impl PublicPackage {
-    pub fn new(
+    pub(crate) fn new(
         identity: Identity,
         min_signers: u16,
         signing_participants: &[Identity],
