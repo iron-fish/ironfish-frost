@@ -218,7 +218,7 @@ pub mod round1 {
             Ok(())
         }
 
-        fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
             let identity = Identity::deserialize_from(&mut reader).map_err(io::Error::other)?;
 
             let frost_package = read_variable_length_bytes(&mut reader)?;
