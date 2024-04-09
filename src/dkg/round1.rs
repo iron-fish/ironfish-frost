@@ -164,13 +164,16 @@ pub struct PublicPackage {
 }
 
 impl PublicPackage {
-    pub(crate) fn new(
+    pub(crate) fn new<I>(
         identity: Identity,
         min_signers: u16,
-        signing_participants: &[Identity],
+        signing_participants: &[I],
         frost_package: Package,
         group_secret_key_shard: [u8; 32],
-    ) -> Self {
+    ) -> Self
+    where
+        I: Borrow<Identity>,
+    {
         let checksum = input_checksum(min_signers, signing_participants);
 
         PublicPackage {
