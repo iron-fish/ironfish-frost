@@ -161,7 +161,7 @@ where
 pub struct PublicPackage {
     identity: Identity,
     frost_package: Package,
-    group_secret_key_shard: [u8; 32],
+    group_secret_key_shard: GroupSecretKeyShard,
     checksum: Checksum,
 }
 
@@ -171,7 +171,7 @@ impl PublicPackage {
         min_signers: u16,
         signing_participants: &[I],
         frost_package: Package,
-        group_secret_key_shard: [u8; 32],
+        group_secret_key_shard: GroupSecretKeyShard,
     ) -> Self
     where
         I: Borrow<Identity>,
@@ -194,8 +194,8 @@ impl PublicPackage {
         &self.frost_package
     }
 
-    pub fn group_secret_key_shard(&self) -> [u8; 32] {
-        self.group_secret_key_shard
+    pub fn group_secret_key_shard(&self) -> &GroupSecretKeyShard {
+        &self.group_secret_key_shard
     }
 
     pub fn checksum(&self) -> Checksum {
@@ -212,7 +212,7 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.group_secret_key_shard)?;
+        writer.write_all(&self.group_secret_key_shard.serialize())?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -223,8 +223,8 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let mut group_secret_key_shard = [0u8; 32];
-        reader.read_exact(&mut group_secret_key_shard)?;
+        let group_secret_key_shard =
+            GroupSecretKeyShard::deserialize_from(&mut reader).map_err(io::Error::other)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -276,7 +276,7 @@ where
         export_secret_package(&secret_package, self_identity, &mut csrng)
             .map_err(Error::EncryptionError)?;
 
-    let group_secret_key_shard: [u8; 32] = GroupSecretKeyShard::random(&mut csrng).serialize();
+    let group_secret_key_shard = GroupSecretKeyShard::random(&mut csrng);
 
     let public_package = PublicPackage::new(
         self_identity.clone(),
@@ -324,7 +324,6 @@ mod tests {
     use crate::frost;
     use crate::frost::keys::dkg::round1::SecretPackage;
     use crate::participant::Secret;
-    use rand::random;
     use rand::thread_rng;
 
     #[test]
@@ -444,11 +443,11 @@ mod tests {
             identity.to_frost_identifier(),
             max_signers,
             min_signers,
-            rng,
+            &mut rng,
         )
         .expect("dkg round1 failed");
 
-        let group_secret_key_shard: [u8; 32] = random();
+        let group_secret_key_shard = GroupSecretKeyShard::random(&mut rng);
 
         let public_package = PublicPackage::new(
             identity.clone(),
@@ -483,11 +482,11 @@ mod tests {
             identity.to_frost_identifier(),
             max_signers,
             min_signers,
-            rng,
+            &mut rng,
         )
         .expect("dkg round1 failed");
 
-        let group_secret_key_shard: [u8; 32] = random();
+        let group_secret_key_shard = GroupSecretKeyShard::random(&mut rng);
 
         let public_package = PublicPackage::new(
             identity.clone(),
