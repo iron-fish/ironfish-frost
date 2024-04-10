@@ -30,6 +30,8 @@ use std::hash::Hasher;
 use std::io;
 use std::mem;
 
+use super::group_key::GroupSecretKeyShard;
+
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
 /// Copy of the [`frost_core::dkg::round1::SecretPackage`] struct. Necessary to implement
@@ -238,13 +240,13 @@ impl PublicPackage {
 }
 
 pub fn round1<'a, I, R: RngCore + CryptoRng>(
-    self_identity: &participant::Identity,
+    self_identity: &Identity,
     min_signers: u16,
     participants: I,
     mut csrng: R,
 ) -> Result<(Vec<u8>, Vec<u8>), Error>
 where
-    I: IntoIterator<Item = &'a participant::Identity>,
+    I: IntoIterator<Item = &'a Identity>,
     R: RngCore + CryptoRng,
 {
     // Remove duplicates from `participants` to ensure that `max_signers` is calculated correctly
@@ -273,10 +275,18 @@ where
     let encrypted_secret_package =
         export_secret_package(&secret_package, self_identity, &mut csrng)
             .map_err(Error::EncryptionError)?;
-    let public_package = public_package.serialize().map_err(Error::FrostError)?;
 
-    // TODO bind the min/max signers and the list of participants to the packages through
-    // checksumming
+    let group_secret_key_shard: [u8; 32] = GroupSecretKeyShard::random(&mut csrng).serialize();
+
+    let public_package = PublicPackage::new(
+        self_identity.clone(),
+        min_signers,
+        &participants,
+        public_package,
+        group_secret_key_shard,
+    );
+    let public_package = public_package.serialize();
+
     Ok((encrypted_secret_package, public_package))
 }
 
@@ -312,7 +322,6 @@ impl std::error::Error for Error {}
 mod tests {
     use super::*;
     use crate::frost;
-    use crate::frost::keys::dkg::round1::Package;
     use crate::frost::keys::dkg::round1::SecretPackage;
     use crate::participant::Secret;
     use rand::random;
@@ -512,6 +521,7 @@ mod tests {
         .expect("round 1 failed");
 
         import_secret_package(&secret_package, &secret).expect("secret package import failed");
-        Package::deserialize(&public_package).expect("public package deserialization failed");
+        PublicPackage::deserialize_from(&public_package[..])
+            .expect("public package deserialization failed");
     }
 }
