@@ -5,9 +5,13 @@
 use std::error;
 use std::fmt;
 
+use siphasher::sip::SipHasher24;
+
 pub(crate) const CHECKSUM_LEN: usize = 8;
 
 pub(crate) type Checksum = u64;
+
+pub(crate) type ChecksumHasher = SipHasher24;
 
 #[derive(Clone, Debug)]
 pub struct ChecksumError;
