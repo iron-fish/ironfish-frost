@@ -25,11 +25,12 @@ use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::borrow::Borrow;
-use std::fmt;
+use std::cmp;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
 
+use super::error::Error;
 use super::group_key::GroupSecretKeyShard;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
@@ -239,6 +240,20 @@ impl PublicPackage {
     }
 }
 
+impl Ord for PublicPackage {
+    #[inline]
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        Ord::cmp(&self.identity(), &other.identity())
+    }
+}
+
+impl PartialOrd<Self> for PublicPackage {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub fn round1<'a, I, R: RngCore + CryptoRng>(
     self_identity: &Identity,
     min_signers: u16,
@@ -288,34 +303,6 @@ where
 
     Ok((encrypted_secret_package, public_package))
 }
-
-#[derive(Debug)]
-pub enum Error {
-    InvalidInput(&'static str),
-    FrostError(frost::Error),
-    EncryptionError(io::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match self {
-            Self::InvalidInput(e) => {
-                write!(f, "invalid input: ")?;
-                e.fmt(f)
-            }
-            Self::FrostError(e) => {
-                write!(f, "frost error: ")?;
-                e.fmt(f)
-            }
-            Self::EncryptionError(e) => {
-                write!(f, "encryption error: ")?;
-                e.fmt(f)
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {
