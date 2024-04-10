@@ -141,7 +141,7 @@ pub struct PublicPackage {
 
 #[must_use]
 fn input_checksum(
-    round1_packages: Vec<round1::PublicPackage>,
+    round1_packages: &[round1::PublicPackage],
     group_secret_key: GroupSecretKey,
 ) -> Checksum {
     let mut hasher = ChecksumHasher::new();
@@ -164,7 +164,7 @@ fn input_checksum(
 impl PublicPackage {
     pub(crate) fn new(
         identity: Identity,
-        round1_packages: Vec<round1::PublicPackage>,
+        round1_packages: &[round1::PublicPackage],
         frost_package: Package,
         group_secret_key: GroupSecretKey,
     ) -> Self {
@@ -250,7 +250,7 @@ mod tests {
 
         for _ in 0..max_signers {
             let secret = participant::Secret::random(thread_rng());
-            secrets.push(secret);
+            secrets.push(secret.clone());
             participants.push(secret.to_identity());
         }
 
@@ -286,7 +286,7 @@ mod tests {
         for package in round1_packages {
             packages.insert(
                 package.identity().to_frost_identifier(),
-                *package.frost_package(),
+                package.frost_package().clone(),
             );
         }
         packages.remove(&secret.to_identity().to_frost_identifier());
@@ -318,10 +318,12 @@ mod tests {
     #[test]
     fn export_import() {
         let (secret, round1_secret_pkg, round1_packages) = create_round1_packages();
-        let (secret_pkg, _) = create_round2_packages(secret, round1_secret_pkg, round1_packages);
+        let (secret_pkg, _) =
+            create_round2_packages(secret.clone(), round1_secret_pkg, round1_packages);
 
-        let exported = export_secret_package(&secret_pkg, &secret.to_identity(), thread_rng())
-            .expect("export failed");
+        let exported =
+            export_secret_package(&secret_pkg, &secret.clone().to_identity(), thread_rng())
+                .expect("export failed");
         let imported = import_secret_package(&exported, &secret).expect("import failed");
 
         assert_eq!(secret_pkg, imported);
@@ -329,192 +331,78 @@ mod tests {
 
     #[test]
     fn test_round2_checksum_stability() {
-        let group_key_part: [u8; 32] = random();
-
-        let secret1 = participant::Secret::random(thread_rng());
-        let secret2 = participant::Secret::random(thread_rng());
-        let identity1 = secret1.to_identity();
-        let identity2 = secret2.to_identity();
-
-        let min_signers: u16 = 2;
-        let signing_participants = [identity1.clone(), identity2.clone()];
-
-        let (secret_package1, package1) = part1(
-            identity1.clone(),
-            &signing_participants,
-            min_signers,
-            group_key_part,
-            thread_rng(),
-        )
-        .expect("creating frost round1 package should not fail");
-
-        let (secret_package2, package2) = part1(
-            identity2.clone(),
-            &signing_participants,
-            min_signers,
-            group_key_part,
-            thread_rng(),
-        )
-        .expect("creating frost round1 package should not fail");
-
         let group_secret_key: [u8; 32] = random();
+        let (_, _, round1_packages) = create_round1_packages();
 
-        let round2_packages1 = part2(
-            identity1,
-            secret_package1,
-            &[package1.clone(), package2.clone()],
-            group_secret_key,
-        )
-        .expect("creating round2 packages should not fail");
-
-        assert_eq!(round2_packages1.len(), 1);
-
-        let round2_packages2 = part2(
-            identity2,
-            secret_package2,
-            &[package1.clone(), package2.clone()],
-            group_secret_key,
-        )
-        .expect("creating round2 packages should not fail");
-
-        let (secret, round1_secret_pkg, round1_packages) = create_round1_packages();
-        let (secret_pkg, round2_packages) = create_round2_packages(secret, round1_secret_pkg, round1_packages);
-        let identity = secret.to_identity();
-
-        let frost_package = round2_packages.get(&identity.to_frost_identifier()).unwrap();
-        let public_package = round2::PublicPackage::new(
-            identity.clone(),
-            round1_packages,
-            *frost_package,
-            [0u8; 32],
-        );
-
-        let checksum_1 = input_checksum(round1_packages, [0u8; 32]);
-        let checksum_2 = input_checksum(round1_packages, [0u8; 32]);
+        let checksum_1 = input_checksum(&round1_packages, group_secret_key);
+        let checksum_2 = input_checksum(&round1_packages, group_secret_key);
 
         assert_eq!(checksum_1, checksum_2);
     }
 
     #[test]
-    fn test_round1_checksum_variation_with_min_signers() {
-        let mut rng = thread_rng();
+    fn test_round2_checksum_variation_with_round1_packages() {
+        let group_secret_key: [u8; 32] = random();
+        let (_, _, round1_packages1) = create_round1_packages();
+        let (_, _, round1_packages2) = create_round1_packages();
 
-        let signing_participants = [
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-        ];
-
-        let min_signers1: u16 = 2;
-        let min_signers2: u16 = 3;
-
-        let checksum_1 = input_checksum(min_signers1, &signing_participants);
-        let checksum_2 = input_checksum(min_signers2, &signing_participants);
+        let checksum_1 = input_checksum(&round1_packages1, group_secret_key);
+        let checksum_2 = input_checksum(&round1_packages2, group_secret_key);
 
         assert_ne!(checksum_1, checksum_2);
     }
 
     #[test]
-    fn test_round1_checksum_variation_with_signing_participants() {
-        let mut rng = thread_rng();
+    fn test_round2_checksum_variation_with_group_secret_key() {
+        let group_secret_key1: [u8; 32] = random();
+        let group_secret_key2: [u8; 32] = random();
+        let (_, _, round1_packages) = create_round1_packages();
 
-        let min_signers: u16 = 2;
-
-        let signing_participants1 = [
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-        ];
-
-        let signing_participants2 = [
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-        ];
-
-        let checksum_1 = input_checksum(min_signers, &signing_participants1);
-        let checksum_2 = input_checksum(min_signers, &signing_participants2);
+        let checksum_1 = input_checksum(&round1_packages, group_secret_key1);
+        let checksum_2 = input_checksum(&round1_packages, group_secret_key2);
 
         assert_ne!(checksum_1, checksum_2);
     }
 
     #[test]
-    fn test_round1_package_checksum() {
-        let mut rng = thread_rng();
+    fn test_round2_package_checksum() {
+        let group_secret_key: [u8; 32] = random();
+        let (secret, round1_secret_pkg, round1_packages) = create_round1_packages();
+        let (_, round2_packages) =
+            create_round2_packages(secret.clone(), round1_secret_pkg, round1_packages.clone());
 
-        let min_signers: u16 = 2;
-
-        let signing_participants = [
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-        ];
-
-        let max_signers: u16 = signing_participants.len() as u16;
-
-        let identity = &signing_participants[0];
-
-        let (_, frost_package) = frost::keys::dkg::part1(
-            identity.to_frost_identifier(),
-            max_signers,
-            min_signers,
-            &mut rng,
-        )
-        .expect("dkg round1 failed");
-
-        let group_secret_key_shard = GroupSecretKeyShard::random(&mut rng);
-
-        let public_package = PublicPackage::new(
-            identity.clone(),
-            min_signers,
-            &signing_participants,
-            frost_package,
-            group_secret_key_shard,
+        let round2_package = round2_packages.values().last().unwrap();
+        let package = PublicPackage::new(
+            secret.to_identity(),
+            &round1_packages[..],
+            round2_package.clone(),
+            group_secret_key,
         );
+        let checksum = input_checksum(&round1_packages[..], group_secret_key);
 
-        let checksum = input_checksum(min_signers, &signing_participants);
-
-        assert_eq!(checksum, public_package.checksum());
+        assert_eq!(checksum, package.checksum());
     }
 
     #[test]
-    fn test_round1_package_serialization() {
-        let mut rng = thread_rng();
+    fn test_round2_package_serialization() {
+        let group_secret_key: [u8; 32] = random();
+        let (secret, round1_secret_pkg, round1_packages) = create_round1_packages();
+        let (_, round2_packages) =
+            create_round2_packages(secret.clone(), round1_secret_pkg, round1_packages.clone());
 
-        let min_signers: u16 = 2;
-
-        let signing_participants = [
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-            Secret::random(&mut rng).to_identity(),
-        ];
-
-        let max_signers: u16 = signing_participants.len() as u16;
-
-        let identity = &signing_participants[0];
-
-        let (_, frost_package) = frost::keys::dkg::part1(
-            identity.to_frost_identifier(),
-            max_signers,
-            min_signers,
-            &mut rng,
-        )
-        .expect("dkg round1 failed");
-
-        let group_secret_key_shard = GroupSecretKeyShard::random(&mut rng);
-
-        let public_package = PublicPackage::new(
-            identity.clone(),
-            min_signers,
-            &signing_participants,
-            frost_package,
-            group_secret_key_shard,
+        let round2_package = round2_packages.values().last().unwrap();
+        let package = PublicPackage::new(
+            secret.to_identity(),
+            &round1_packages[..],
+            round2_package.clone(),
+            group_secret_key,
         );
 
-        let serialized = public_package.serialize();
+        let serialized = package.serialize();
 
         let deserialized = PublicPackage::deserialize_from(&serialized[..])
             .expect("package deserialization failed");
 
-        assert_eq!(public_package, deserialized);
+        assert_eq!(package, deserialized);
     }
 }
