@@ -80,7 +80,7 @@ impl SerializableSecretPackage {
         reader.read_exact(&mut scalar)?;
         let scalar: Option<Scalar> = Scalar::from_bytes(&scalar).into();
         let secret_share =
-            scalar.ok_or_else(|| io::Error::other("coefficients deserialization failed"))?;
+            scalar.ok_or_else(|| io::Error::other("secret_share deserialization failed"))?;
 
         let min_signers = read_u16(&mut reader)?;
         let max_signers = read_u16(&mut reader)?;
