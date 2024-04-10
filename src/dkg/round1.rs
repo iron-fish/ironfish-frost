@@ -244,7 +244,7 @@ pub fn round1<'a, I, R: RngCore + CryptoRng>(
     min_signers: u16,
     participants: I,
     mut csrng: R,
-) -> Result<(Vec<u8>, Vec<u8>), Error>
+) -> Result<(Vec<u8>, PublicPackage), Error>
 where
     I: IntoIterator<Item = &'a Identity>,
     R: RngCore + CryptoRng,
@@ -285,7 +285,6 @@ where
         public_package,
         group_secret_key_shard,
     );
-    let public_package = public_package.serialize();
 
     Ok((encrypted_secret_package, public_package))
 }
@@ -511,7 +510,7 @@ mod tests {
         let identity2 = participant::Secret::random(thread_rng()).to_identity();
         let identity3 = participant::Secret::random(thread_rng()).to_identity();
 
-        let (secret_package, public_package) = super::round1(
+        let (secret_package, _) = super::round1(
             &identity1,
             2,
             [&identity1, &identity2, &identity3],
@@ -520,7 +519,5 @@ mod tests {
         .expect("round 1 failed");
 
         import_secret_package(&secret_package, &secret).expect("secret package import failed");
-        PublicPackage::deserialize_from(&public_package[..])
-            .expect("public package deserialization failed");
     }
 }
