@@ -25,11 +25,11 @@ use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::borrow::Borrow;
-use std::fmt;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
 
+use super::error::Error;
 use super::group_key::GroupSecretKeyShard;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
@@ -298,34 +298,6 @@ where
 
     Ok((encrypted_secret_package, public_package))
 }
-
-#[derive(Debug)]
-pub enum Error {
-    InvalidInput(&'static str),
-    FrostError(frost::Error),
-    EncryptionError(io::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match self {
-            Self::InvalidInput(e) => {
-                write!(f, "invalid input: ")?;
-                e.fmt(f)
-            }
-            Self::FrostError(e) => {
-                write!(f, "frost error: ")?;
-                e.fmt(f)
-            }
-            Self::EncryptionError(e) => {
-                write!(f, "encryption error: ")?;
-                e.fmt(f)
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {
