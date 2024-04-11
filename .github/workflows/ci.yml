@@ -47,6 +47,10 @@ jobs:
           save-if: false
           shared-key: base
 
-      - name: Run tests
+      - name: Run tests (debug mode)
         run: |
           cargo test
+
+      - name: Run tests (release mode)
+        run: |
+          cargo test --release

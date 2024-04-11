@@ -26,11 +26,11 @@ use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::borrow::Borrow;
 use std::cmp;
-use std::fmt;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
 
+use super::error::Error;
 use super::group_key::GroupSecretKeyShard;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
@@ -136,23 +136,32 @@ pub fn import_secret_package(
 }
 
 #[must_use]
-fn input_checksum<I>(min_signers: u16, signing_participants: &[I]) -> Checksum
+fn input_checksum<I>(min_signers: u16, participants: &[I]) -> Checksum
 where
     I: Borrow<Identity>,
 {
+    // This function is only used in `PublicPackage::new()`, which in turn is only used in
+    // `round1()`. `round1()` already takes care of sorting and deduping the participants, hence we
+    // can assume that our input does not need any further processing. The following checks that
+    // it's indeed the case, but only for debug builds.
+    #[cfg(debug_assertions)]
+    {
+        let input_participants = participants.iter().map(Borrow::borrow).collect::<Vec<_>>();
+        let mut deduped_participants = input_participants.clone();
+        deduped_participants.sort_unstable();
+        deduped_participants.dedup();
+        debug_assert_eq!(
+            input_participants, deduped_participants,
+            "participants is expected to be sorted and to contain no duplicates"
+        );
+    }
+
     let mut hasher = ChecksumHasher::new();
 
     hasher.write(&min_signers.to_le_bytes());
 
-    let mut signing_participants = signing_participants
-        .iter()
-        .map(Borrow::borrow)
-        .collect::<Vec<_>>();
-    signing_participants.sort_unstable();
-    signing_participants.dedup();
-
-    for id in signing_participants {
-        hasher.write(&id.serialize());
+    for id in participants {
+        hasher.write(&id.borrow().serialize());
     }
 
     hasher.finish()
@@ -264,7 +273,8 @@ where
     I: IntoIterator<Item = &'a Identity>,
     R: RngCore + CryptoRng,
 {
-    // Remove duplicates from `participants` to ensure that `max_signers` is calculated correctly
+    // Remove duplicates from `participants` to ensure that `max_signers` is calculated correctly.
+    // `Package::new()` also expects `participants` to be deduped and sorted.
     let mut participants = participants.into_iter().collect::<Vec<_>>();
     participants.sort_unstable();
     participants.dedup();
@@ -304,39 +314,10 @@ where
     Ok((encrypted_secret_package, public_package))
 }
 
-#[derive(Debug)]
-pub enum Error {
-    InvalidInput(&'static str),
-    FrostError(frost::Error),
-    EncryptionError(io::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match self {
-            Self::InvalidInput(e) => {
-                write!(f, "invalid input: ")?;
-                e.fmt(f)
-            }
-            Self::FrostError(e) => {
-                write!(f, "frost error: ")?;
-                e.fmt(f)
-            }
-            Self::EncryptionError(e) => {
-                write!(f, "encryption error: ")?;
-                e.fmt(f)
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::frost;
-    use crate::frost::keys::dkg::round1::SecretPackage;
     use crate::participant::Secret;
     use rand::thread_rng;
 
@@ -381,16 +362,21 @@ mod tests {
     fn test_round1_checksum_stability() {
         let mut rng = thread_rng();
 
-        let min_signers: u16 = 2;
-
-        let signing_participants = [
+        let min_signers = 2;
+        let participants = [
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
         ];
 
-        let checksum_1 = input_checksum(min_signers, &signing_participants);
-        let checksum_2 = input_checksum(min_signers, &signing_participants);
+        let checksum_1 = super::round1(&participants[0], min_signers, &participants, &mut rng)
+            .expect("dkg round 1 failed")
+            .1
+            .checksum();
+        let checksum_2 = super::round1(&participants[1], min_signers, &participants, &mut rng)
+            .expect("dkg round 1 failed")
+            .1
+            .checksum();
 
         assert_eq!(checksum_1, checksum_2);
     }
@@ -399,17 +385,23 @@ mod tests {
     fn test_round1_checksum_variation_with_min_signers() {
         let mut rng = thread_rng();
 
-        let signing_participants = [
+        let participants = [
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
         ];
 
-        let min_signers1: u16 = 2;
-        let min_signers2: u16 = 3;
+        let min_signers1 = 2;
+        let min_signers2 = 3;
 
-        let checksum_1 = input_checksum(min_signers1, &signing_participants);
-        let checksum_2 = input_checksum(min_signers2, &signing_participants);
+        let checksum_1 = super::round1(&participants[0], min_signers1, &participants, &mut rng)
+            .expect("dkg round 1 failed")
+            .1
+            .checksum();
+        let checksum_2 = super::round1(&participants[0], min_signers2, &participants, &mut rng)
+            .expect("dkg round 1 failed")
+            .1
+            .checksum();
 
         assert_ne!(checksum_1, checksum_2);
     }
@@ -418,21 +410,27 @@ mod tests {
     fn test_round1_checksum_variation_with_signing_participants() {
         let mut rng = thread_rng();
 
-        let min_signers: u16 = 2;
+        let min_signers = 2;
 
-        let signing_participants1 = [
+        let participants1 = [
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
         ];
 
-        let signing_participants2 = [
+        let participants2 = [
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
         ];
 
-        let checksum_1 = input_checksum(min_signers, &signing_participants1);
-        let checksum_2 = input_checksum(min_signers, &signing_participants2);
+        let checksum_1 = super::round1(&participants1[0], min_signers, &participants1, &mut rng)
+            .expect("dkg round 1 failed")
+            .1
+            .checksum();
+        let checksum_2 = super::round1(&participants2[0], min_signers, &participants2, &mut rng)
+            .expect("dkg round 1 failed")
+            .1
+            .checksum();
 
         assert_ne!(checksum_1, checksum_2);
     }
@@ -441,74 +439,43 @@ mod tests {
     fn test_round1_package_checksum() {
         let mut rng = thread_rng();
 
-        let min_signers: u16 = 2;
+        let min_signers = 2;
 
-        let signing_participants = [
+        let participants = [
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
         ];
 
-        let max_signers: u16 = signing_participants.len() as u16;
+        let identity = &participants[0];
 
-        let identity = &signing_participants[0];
+        let (_, public_package) = super::round1(identity, min_signers, &participants, &mut rng)
+            .expect("dkg round 1 failed");
 
-        let (_, frost_package) = frost::keys::dkg::part1(
-            identity.to_frost_identifier(),
-            max_signers,
-            min_signers,
-            &mut rng,
-        )
-        .expect("dkg round1 failed");
+        let mut participants = participants.to_vec();
+        participants.sort();
+        participants.dedup();
+        let expected_checksum = input_checksum(min_signers, &participants);
 
-        let group_secret_key_shard = GroupSecretKeyShard::random(&mut rng);
-
-        let public_package = PublicPackage::new(
-            identity.clone(),
-            min_signers,
-            &signing_participants,
-            frost_package,
-            group_secret_key_shard,
-        );
-
-        let checksum = input_checksum(min_signers, &signing_participants);
-
-        assert_eq!(checksum, public_package.checksum());
+        assert_eq!(expected_checksum, public_package.checksum());
     }
 
     #[test]
     fn test_round1_package_serialization() {
         let mut rng = thread_rng();
 
-        let min_signers: u16 = 2;
+        let min_signers = 2;
 
-        let signing_participants = [
+        let participants = [
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
             Secret::random(&mut rng).to_identity(),
         ];
 
-        let max_signers: u16 = signing_participants.len() as u16;
+        let identity = &participants[0];
 
-        let identity = &signing_participants[0];
-
-        let (_, frost_package) = frost::keys::dkg::part1(
-            identity.to_frost_identifier(),
-            max_signers,
-            min_signers,
-            &mut rng,
-        )
-        .expect("dkg round1 failed");
-
-        let group_secret_key_shard = GroupSecretKeyShard::random(&mut rng);
-
-        let public_package = PublicPackage::new(
-            identity.clone(),
-            min_signers,
-            &signing_participants,
-            frost_package,
-            group_secret_key_shard,
-        );
+        let (_, public_package) = super::round1(identity, min_signers, &participants, &mut rng)
+            .expect("dkg round 1 failed");
 
         let serialized = public_package.serialize();
 
