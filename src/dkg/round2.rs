@@ -284,7 +284,7 @@ mod tests {
     use super::*;
     use crate::dkg::round1;
     use crate::frost;
-    use rand::{thread_rng};
+    use rand::thread_rng;
     use std::collections::BTreeMap;
 
     fn create_round1_packages() -> (
