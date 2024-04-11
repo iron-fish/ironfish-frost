@@ -25,7 +25,6 @@ use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::borrow::Borrow;
-use std::cmp;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
@@ -246,20 +245,6 @@ impl PublicPackage {
             group_secret_key_shard,
             checksum,
         })
-    }
-}
-
-impl Ord for PublicPackage {
-    #[inline]
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        Ord::cmp(&self.identity(), &other.identity())
-    }
-}
-
-impl PartialOrd<Self> for PublicPackage {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
     }
 }
 

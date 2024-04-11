@@ -157,7 +157,7 @@ fn input_checksum(
         .iter()
         .map(Borrow::borrow)
         .collect::<Vec<_>>();
-    packages.sort_unstable();
+    packages.sort_unstable_by_key(|&p| p.identity());
     packages.dedup();
 
     for package in packages {
