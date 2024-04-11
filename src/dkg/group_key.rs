@@ -15,7 +15,8 @@ pub const GROUP_SECRET_KEY_LEN: usize = 32;
 pub type GroupSecretKey = [u8; GROUP_SECRET_KEY_LEN];
 pub type GroupSecretKeyShardSerialization = [u8; GROUP_SECRET_KEY_LEN];
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone)]
+#[allow(missing_debug_implementations)]
 pub struct GroupSecretKeyShard {
     shard: [u8; GROUP_SECRET_KEY_LEN],
 }

@@ -34,7 +34,6 @@ use std::io;
 use std::mem;
 
 use super::error::Error;
-use super::group_key::GroupSecretKeyShard;
 use super::round1;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
@@ -242,14 +241,11 @@ where
         .expect("missing public package for self_identity");
 
     let mut frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
-    let mut group_secret_key_shards: Vec<&GroupSecretKeyShard> = Vec::new();
 
     for public_package in round1_public_packages {
         if public_package.checksum() != self_public_package.checksum() {
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
-
-        group_secret_key_shards.push(public_package.group_secret_key_shard());
 
         // self_public_package must be excluded from frost::keys::dkg::part2 inputs
         if public_package.identity() == self_identity {

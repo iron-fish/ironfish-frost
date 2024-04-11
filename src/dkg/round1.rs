@@ -5,6 +5,9 @@
 use crate::checksum::Checksum;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
+use crate::dkg::error::Error;
+use crate::dkg::group_key::GroupSecretKeyShard;
+use crate::dkg::group_key::GroupSecretKeyShardSerialization;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package;
 use crate::frost::keys::dkg::round1::SecretPackage;
@@ -28,9 +31,6 @@ use std::borrow::Borrow;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
-
-use super::error::Error;
-use super::group_key::GroupSecretKeyShard;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -170,27 +170,35 @@ where
 pub struct PublicPackage {
     identity: Identity,
     frost_package: Package,
-    group_secret_key_shard: GroupSecretKeyShard,
+    group_secret_key_shard_encrypted:
+        MultiRecipientBlob<Vec<GroupSecretKeyShardSerialization>, Vec<u8>>,
     checksum: Checksum,
 }
 
 impl PublicPackage {
-    pub(crate) fn new<I>(
+    pub(crate) fn new<I, R>(
         identity: Identity,
         min_signers: u16,
-        signing_participants: &[I],
+        participants: &[I],
         frost_package: Package,
         group_secret_key_shard: GroupSecretKeyShard,
+        csrng: R,
     ) -> Self
     where
         I: Borrow<Identity>,
+        R: RngCore + CryptoRng,
     {
-        let checksum = input_checksum(min_signers, signing_participants);
+        let checksum = input_checksum(min_signers, participants);
+        let group_secret_key_shard_encrypted = multienc::encrypt(
+            &group_secret_key_shard.serialize(),
+            participants.iter().map(Borrow::borrow),
+            csrng,
+        );
 
         PublicPackage {
             identity,
             frost_package,
-            group_secret_key_shard,
+            group_secret_key_shard_encrypted,
             checksum,
         }
     }
@@ -203,8 +211,19 @@ impl PublicPackage {
         &self.frost_package
     }
 
-    pub fn group_secret_key_shard(&self) -> &GroupSecretKeyShard {
-        &self.group_secret_key_shard
+    pub fn group_secret_key_shard_encrypted(
+        &self,
+    ) -> &MultiRecipientBlob<Vec<GroupSecretKeyShardSerialization>, Vec<u8>> {
+        &self.group_secret_key_shard_encrypted
+    }
+
+    pub fn group_secret_key_shard(
+        &self,
+        secret: &participant::Secret,
+    ) -> io::Result<GroupSecretKeyShard> {
+        let serialized = multienc::decrypt(secret, &self.group_secret_key_shard_encrypted)
+            .map_err(io::Error::other)?;
+        GroupSecretKeyShard::deserialize_from(&serialized[..])
     }
 
     pub fn checksum(&self) -> Checksum {
@@ -221,7 +240,8 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.group_secret_key_shard.serialize())?;
+        self.group_secret_key_shard_encrypted
+            .serialize_into(&mut writer)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -232,8 +252,7 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let group_secret_key_shard =
-            GroupSecretKeyShard::deserialize_from(&mut reader).map_err(io::Error::other)?;
+        let group_secret_key_shard_encrypted = MultiRecipientBlob::deserialize_from(&mut reader)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -242,7 +261,7 @@ impl PublicPackage {
         Ok(Self {
             identity,
             frost_package,
-            group_secret_key_shard,
+            group_secret_key_shard_encrypted,
             checksum,
         })
     }
@@ -294,6 +313,7 @@ where
         &participants,
         public_package,
         group_secret_key_shard,
+        &mut csrng,
     );
 
     Ok((encrypted_secret_package, public_package))
@@ -477,7 +497,7 @@ mod tests {
         let identity2 = participant::Secret::random(thread_rng()).to_identity();
         let identity3 = participant::Secret::random(thread_rng()).to_identity();
 
-        let (secret_package, _) = super::round1(
+        let (secret_package, public_package) = super::round1(
             &identity1,
             2,
             [&identity1, &identity2, &identity3],
@@ -486,5 +506,9 @@ mod tests {
         .expect("round 1 failed");
 
         import_secret_package(&secret_package, &secret).expect("secret package import failed");
+
+        public_package
+            .group_secret_key_shard(&secret)
+            .expect("group secret key shard decryption failed");
     }
 }
