@@ -142,8 +142,10 @@ pub struct PublicPackage {
     checksum: Checksum,
 }
 
-#[allow(dead_code)]
-fn input_checksum(round1_packages: &[round1::PublicPackage]) -> Checksum {
+fn input_checksum<P>(round1_packages: &[P]) -> Checksum
+where
+    P: Borrow<round1::PublicPackage>,
+{
     let mut hasher = ChecksumHasher::new();
 
     let mut packages = round1_packages
@@ -161,12 +163,10 @@ fn input_checksum(round1_packages: &[round1::PublicPackage]) -> Checksum {
 }
 
 impl PublicPackage {
-    #[allow(dead_code)]
-    pub(crate) fn new(
-        identity: Identity,
-        round1_packages: &[round1::PublicPackage],
-        frost_package: Package,
-    ) -> Self {
+    pub(crate) fn new<P>(identity: Identity, round1_packages: &[P], frost_package: Package) -> Self
+    where
+        P: Borrow<round1::PublicPackage>,
+    {
         let checksum = input_checksum(round1_packages);
 
         PublicPackage {
@@ -225,7 +225,7 @@ pub fn round2<'a, P, R: RngCore + CryptoRng>(
     round1_secret_package: &Round1SecretPackage,
     round1_public_packages: P,
     mut csrng: R,
-) -> Result<(Vec<u8>, BTreeMap<Identifier, Package>), Error>
+) -> Result<(Vec<u8>, BTreeMap<Identity, PublicPackage>), Error>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
@@ -240,22 +240,24 @@ where
         .find(|&p| p.identity() == self_identity)
         .expect("missing public package for self_identity");
 
+    let mut identities: BTreeMap<Identifier, &Identity> = BTreeMap::new();
     let mut frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
 
-    for public_package in round1_public_packages {
+    for public_package in round1_public_packages.iter() {
         if public_package.checksum() != self_public_package.checksum() {
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
 
+        let identity = public_package.identity();
+        let identifier = identity.to_frost_identifier();
+        identities.insert(identifier, identity);
+
         // self_public_package must be excluded from frost::keys::dkg::part2 inputs
-        if public_package.identity() == self_identity {
+        if identity == self_identity {
             continue;
         }
 
-        frost_packages.insert(
-            public_package.identity().to_frost_identifier(),
-            public_package.frost_package().clone(),
-        );
+        frost_packages.insert(identifier, public_package.frost_package().clone());
     }
 
     let (round2_secret_package, round2_packages) =
@@ -266,11 +268,19 @@ where
         export_secret_package(&round2_secret_package, self_identity, &mut csrng)
             .map_err(Error::EncryptionError)?;
 
-    // TODO add group_secret_key to PublicPackage structs
-    // let group_secret_key = GroupSecretKeyShard::combine(group_secret_key_shards);
+    let mut round2_public_packages: BTreeMap<Identity, PublicPackage> = BTreeMap::new();
+    for (identifier, package) in round2_packages {
+        let identity = *identities
+            .get(&identifier)
+            .expect("round2 generated package for unknown identifier");
 
-    // TODO return round2::PublicPackage structs
-    Ok((encrypted_secret_package, round2_packages))
+        let public_package =
+            PublicPackage::new(identity.clone(), &round1_public_packages[..], package);
+
+        round2_public_packages.insert(identity.clone(), public_package);
+    }
+
+    Ok((encrypted_secret_package, round2_public_packages))
 }
 
 #[cfg(test)]
@@ -465,7 +475,7 @@ mod tests {
         let round1_secret_package = round1::import_secret_package(&round1_secret_package, &secret)
             .expect("secret package import failed");
 
-        let (secret_package, _) = super::round2(
+        let (secret_package, round2_public_packages) = super::round2(
             &identity1,
             &round1_secret_package,
             [&package1, &package2, &package3],
@@ -475,5 +485,12 @@ mod tests {
 
         import_secret_package(&secret_package, &secret)
             .expect("round 2 secret package import failed");
+
+        round2_public_packages
+            .get(&identity2)
+            .expect("round 2 public packages missing package for identity2");
+        round2_public_packages
+            .get(&identity3)
+            .expect("round 2 public packages missing package for identity3");
     }
 }
