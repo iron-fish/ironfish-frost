@@ -138,7 +138,7 @@ where
     R: RngCore + CryptoRng,
 {
     let mut round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
-    round1_public_packages.sort_unstable();
+    round1_public_packages.sort_unstable_by(|a, b| a.identity().cmp(b.identity()));
     round1_public_packages.dedup();
     let round1_public_packages = round1_public_packages;
 
