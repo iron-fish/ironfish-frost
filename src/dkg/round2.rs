@@ -144,9 +144,7 @@ pub struct PublicPackage {
 }
 
 #[allow(dead_code)]
-fn input_checksum(
-    round1_packages: &[round1::PublicPackage],
-) -> Checksum {
+fn input_checksum(round1_packages: &[round1::PublicPackage]) -> Checksum {
     let mut hasher = ChecksumHasher::new();
 
     let mut packages = round1_packages
