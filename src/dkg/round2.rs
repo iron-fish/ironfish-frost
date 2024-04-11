@@ -139,7 +139,7 @@ pub struct PublicPackage {
     checksum: Checksum,
 }
 
-#[must_use]
+#[allow(dead_code)]
 fn input_checksum(
     round1_packages: &[round1::PublicPackage],
     group_secret_key: GroupSecretKey,
@@ -162,6 +162,7 @@ fn input_checksum(
 }
 
 impl PublicPackage {
+    #[allow(dead_code)]
     pub(crate) fn new(
         identity: Identity,
         round1_packages: &[round1::PublicPackage],
@@ -234,7 +235,7 @@ impl PublicPackage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{dkg::round2, frost};
+    use crate::frost;
     use rand::{random, thread_rng};
     use std::collections::BTreeMap;
 
@@ -271,7 +272,7 @@ mod tests {
         }
 
         let secret = secrets[0].clone();
-        let id = secret.to_identity().to_frost_identifier();
+        let _id = secret.to_identity().to_frost_identifier();
         let round1_secret_pkg = secret_packages[0].clone();
 
         (secret, round1_secret_pkg, public_packages)
