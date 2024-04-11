@@ -11,6 +11,7 @@ use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::cell::OnceCell;
 use std::cmp;
+use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::io;
@@ -302,6 +303,15 @@ impl<'a> From<&'a Identity> for frost::Identifier {
     #[inline]
     fn from(identity: &Identity) -> frost::Identifier {
         identity.to_frost_identifier()
+    }
+}
+
+impl fmt::Display for Identity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in self.serialize() {
+            write!(f, "{:02x}", byte)?;
+        }
+        Ok(())
     }
 }
 
