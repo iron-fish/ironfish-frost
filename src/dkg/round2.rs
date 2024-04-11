@@ -129,7 +129,7 @@ pub fn import_secret_package(
 
 pub fn round2<'a, P, R: RngCore + CryptoRng>(
     self_identity: &participant::Identity,
-    round1_secret_package: round1::SecretPackage,
+    round1_secret_package: &round1::SecretPackage,
     round1_public_packages: P,
     mut csrng: R,
 ) -> Result<(Vec<u8>, BTreeMap<Identifier, Package>), Error>
@@ -169,7 +169,7 @@ where
     }
 
     let (round2_secret_package, round2_packages) =
-        frost::keys::dkg::part2(round1_secret_package, &frost_packages)
+        frost::keys::dkg::part2(round1_secret_package.clone(), &frost_packages)
             .map_err(Error::FrostError)?;
 
     let encrypted_secret_package =
@@ -287,7 +287,7 @@ mod tests {
 
         let (secret_package, _) = super::round2(
             &identity1,
-            round1_secret_package,
+            &round1_secret_package,
             [&package1, &package2, &package3],
             thread_rng(),
         )
