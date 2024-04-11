@@ -280,7 +280,7 @@ impl PublicPackage {
     }
 }
 
-pub fn round1<'a, I, R: RngCore + CryptoRng>(
+pub fn round1<'a, I, R>(
     self_identity: &Identity,
     min_signers: u16,
     participants: I,
@@ -334,7 +334,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frost;
     use crate::participant::Secret;
     use rand::thread_rng;
 
@@ -501,10 +500,10 @@ mod tests {
 
     #[test]
     fn round1() {
-        let secret = participant::Secret::random(thread_rng());
+        let secret = Secret::random(thread_rng());
         let identity1 = secret.to_identity();
-        let identity2 = participant::Secret::random(thread_rng()).to_identity();
-        let identity3 = participant::Secret::random(thread_rng()).to_identity();
+        let identity2 = Secret::random(thread_rng()).to_identity();
+        let identity3 = Secret::random(thread_rng()).to_identity();
 
         let (secret_package, public_package) = super::round1(
             &identity1,

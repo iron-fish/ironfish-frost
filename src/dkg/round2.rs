@@ -218,7 +218,7 @@ impl PublicPackage {
     }
 }
 
-pub fn round2<'a, P, R: RngCore + CryptoRng>(
+pub fn round2<'a, P, R>(
     self_identity: &Identity,
     round1_secret_package: &Round1SecretPackage,
     round1_public_packages: P,
@@ -313,10 +313,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dkg::round1;
-    use crate::frost;
     use rand::thread_rng;
-    use std::collections::BTreeMap;
 
     fn create_round1_packages() -> (
         participant::Secret,
