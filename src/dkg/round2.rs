@@ -246,7 +246,7 @@ where
 
     for public_package in round1_public_packages {
         if public_package.checksum() != self_public_package.checksum() {
-            return Err(Error::ChecksumError(ChecksumError));
+            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
 
         group_secret_key_shards.push(public_package.group_secret_key_shard());

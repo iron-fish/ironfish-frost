@@ -141,7 +141,7 @@ impl SigningCommitment {
         if self.checksum == computed_checksum {
             Ok(())
         } else {
-            Err(ChecksumError)
+            Err(ChecksumError::SigningCommitmentError)
         }
     }
 
