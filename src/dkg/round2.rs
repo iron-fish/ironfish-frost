@@ -34,9 +34,7 @@ use std::io;
 use std::mem;
 
 use super::error::Error;
-use super::group_key::GroupSecretKey;
 use super::group_key::GroupSecretKeyShard;
-use super::group_key::GROUP_SECRET_KEY_LEN;
 use super::round1;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
@@ -142,14 +140,12 @@ pub fn import_secret_package(
 pub struct PublicPackage {
     identity: Identity,
     frost_package: Package,
-    group_secret_key: GroupSecretKey,
     checksum: Checksum,
 }
 
 #[allow(dead_code)]
 fn input_checksum(
     round1_packages: &[round1::PublicPackage],
-    group_secret_key: GroupSecretKey,
 ) -> Checksum {
     let mut hasher = ChecksumHasher::new();
 
@@ -163,7 +159,6 @@ fn input_checksum(
     for package in packages {
         hasher.write(&package.serialize());
     }
-    hasher.write(&group_secret_key);
 
     hasher.finish()
 }
@@ -174,14 +169,12 @@ impl PublicPackage {
         identity: Identity,
         round1_packages: &[round1::PublicPackage],
         frost_package: Package,
-        group_secret_key: GroupSecretKey,
     ) -> Self {
-        let checksum = input_checksum(round1_packages, group_secret_key);
+        let checksum = input_checksum(round1_packages);
 
         PublicPackage {
             identity,
             frost_package,
-            group_secret_key,
             checksum,
         }
     }
@@ -192,10 +185,6 @@ impl PublicPackage {
 
     pub fn frost_package(&self) -> &Package {
         &self.frost_package
-    }
-
-    pub fn group_secret_key(&self) -> &GroupSecretKey {
-        &self.group_secret_key
     }
 
     pub fn checksum(&self) -> Checksum {
@@ -212,7 +201,6 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(self.group_secret_key())?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -223,9 +211,6 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let mut group_secret_key = [0u8; GROUP_SECRET_KEY_LEN];
-        reader.read_exact(&mut group_secret_key)?;
-
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
         let checksum = u64::from_le_bytes(checksum);
@@ -233,7 +218,6 @@ impl PublicPackage {
         Ok(Self {
             identity,
             frost_package,
-            group_secret_key,
             checksum,
         })
     }
@@ -396,42 +380,27 @@ mod tests {
 
     #[test]
     fn test_round2_checksum_stability() {
-        let group_secret_key: [u8; 32] = random();
         let (_, _, round1_packages) = create_round1_packages();
 
-        let checksum_1 = input_checksum(&round1_packages, group_secret_key);
-        let checksum_2 = input_checksum(&round1_packages, group_secret_key);
+        let checksum_1 = input_checksum(&round1_packages);
+        let checksum_2 = input_checksum(&round1_packages);
 
         assert_eq!(checksum_1, checksum_2);
     }
 
     #[test]
     fn test_round2_checksum_variation_with_round1_packages() {
-        let group_secret_key: [u8; 32] = random();
         let (_, _, round1_packages1) = create_round1_packages();
         let (_, _, round1_packages2) = create_round1_packages();
 
-        let checksum_1 = input_checksum(&round1_packages1, group_secret_key);
-        let checksum_2 = input_checksum(&round1_packages2, group_secret_key);
-
-        assert_ne!(checksum_1, checksum_2);
-    }
-
-    #[test]
-    fn test_round2_checksum_variation_with_group_secret_key() {
-        let group_secret_key1: [u8; 32] = random();
-        let group_secret_key2: [u8; 32] = random();
-        let (_, _, round1_packages) = create_round1_packages();
-
-        let checksum_1 = input_checksum(&round1_packages, group_secret_key1);
-        let checksum_2 = input_checksum(&round1_packages, group_secret_key2);
+        let checksum_1 = input_checksum(&round1_packages1);
+        let checksum_2 = input_checksum(&round1_packages2);
 
         assert_ne!(checksum_1, checksum_2);
     }
 
     #[test]
     fn test_round2_package_checksum() {
-        let group_secret_key: [u8; 32] = random();
         let (secret, round1_secret_pkg, round1_packages) = create_round1_packages();
         let (_, round2_packages) =
             create_round2_packages(secret.clone(), round1_secret_pkg, round1_packages.clone());
@@ -441,16 +410,14 @@ mod tests {
             secret.to_identity(),
             &round1_packages[..],
             round2_package.clone(),
-            group_secret_key,
         );
-        let checksum = input_checksum(&round1_packages[..], group_secret_key);
+        let checksum = input_checksum(&round1_packages[..]);
 
         assert_eq!(checksum, package.checksum());
     }
 
     #[test]
     fn test_round2_package_serialization() {
-        let group_secret_key: [u8; 32] = random();
         let (secret, round1_secret_pkg, round1_packages) = create_round1_packages();
         let (_, round2_packages) =
             create_round2_packages(secret.clone(), round1_secret_pkg, round1_packages.clone());
@@ -460,7 +427,6 @@ mod tests {
             secret.to_identity(),
             &round1_packages[..],
             round2_package.clone(),
-            group_secret_key,
         );
 
         let serialized = package.serialize();
