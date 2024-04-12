@@ -135,7 +135,8 @@ pub fn import_secret_package(
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PublicPackage {
-    identity: Identity,
+    sender_identity: Identity,
+    recipient_identity: Identity,
     frost_package: Package,
     checksum: Checksum,
 }
@@ -161,21 +162,31 @@ where
 }
 
 impl PublicPackage {
-    pub(crate) fn new<P>(identity: Identity, round1_packages: &[P], frost_package: Package) -> Self
+    pub(crate) fn new<P>(
+        sender_identity: Identity,
+        recipient_identity: Identity,
+        round1_packages: &[P],
+        frost_package: Package,
+    ) -> Self
     where
         P: Borrow<round1::PublicPackage>,
     {
         let checksum = input_checksum(round1_packages);
 
         PublicPackage {
-            identity,
+            sender_identity,
+            recipient_identity,
             frost_package,
             checksum,
         }
     }
 
-    pub fn identity(&self) -> &Identity {
-        &self.identity
+    pub fn sender_identity(&self) -> &Identity {
+        &self.sender_identity
+    }
+
+    pub fn recipient_identity(&self) -> &Identity {
+        &self.recipient_identity
     }
 
     pub fn frost_package(&self) -> &Package {
@@ -193,7 +204,8 @@ impl PublicPackage {
     }
 
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
-        self.identity.serialize_into(&mut writer)?;
+        self.sender_identity.serialize_into(&mut writer)?;
+        self.recipient_identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
@@ -201,7 +213,8 @@ impl PublicPackage {
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
-        let identity = Identity::deserialize_from(&mut reader).expect("reading identity failed");
+        let sender_identity = Identity::deserialize_from(&mut reader)?;
+        let recipient_identity = Identity::deserialize_from(&mut reader)?;
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
@@ -211,7 +224,8 @@ impl PublicPackage {
         let checksum = u64::from_le_bytes(checksum);
 
         Ok(Self {
-            identity,
+            sender_identity,
+            recipient_identity,
             frost_package,
             checksum,
         })
@@ -223,7 +237,7 @@ pub fn round2<'a, P, R: RngCore + CryptoRng>(
     round1_secret_package: &Round1SecretPackage,
     round1_public_packages: P,
     mut csrng: R,
-) -> Result<(Vec<u8>, BTreeMap<Identity, PublicPackage>), Error>
+) -> Result<(Vec<u8>, Vec<PublicPackage>), Error>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
@@ -295,16 +309,20 @@ where
             .map_err(Error::EncryptionError)?;
 
     // Convert the Identifier->Package map to an Identity->PublicPackage map
-    let mut round2_public_packages = BTreeMap::new();
+    let mut round2_public_packages = Vec::new();
     for (identifier, package) in round2_packages {
         let identity = *identities
             .get(&identifier)
             .expect("round2 generated package for unknown identifier");
 
-        let public_package =
-            PublicPackage::new(identity.clone(), &round1_public_packages[..], package);
+        let public_package = PublicPackage::new(
+            self_identity.clone(),
+            identity.clone(),
+            &round1_public_packages[..],
+            package,
+        );
 
-        round2_public_packages.insert(identity.clone(), public_package);
+        round2_public_packages.push(public_package);
     }
 
     Ok((encrypted_secret_package, round2_public_packages))
@@ -438,6 +456,8 @@ mod tests {
         let round2_package = round2_packages.values().last().unwrap();
         let package = PublicPackage::new(
             secret.to_identity(),
+            // reuses identity for convenience; does not affect checksum
+            secret.to_identity(),
             &round1_packages[..],
             round2_package.clone(),
         );
@@ -454,6 +474,8 @@ mod tests {
 
         let round2_package = round2_packages.values().last().unwrap();
         let package = PublicPackage::new(
+            secret.to_identity(),
+            // reuses identity for convenience
             secret.to_identity(),
             &round1_packages[..],
             round2_package.clone(),
@@ -513,10 +535,12 @@ mod tests {
             .expect("round 2 secret package import failed");
 
         round2_public_packages
-            .get(&identity2)
+            .iter()
+            .find(|&p| p.recipient_identity() == &identity2)
             .expect("round 2 public packages missing package for identity2");
         round2_public_packages
-            .get(&identity3)
+            .iter()
+            .find(|&p| p.recipient_identity() == &identity3)
             .expect("round 2 public packages missing package for identity3");
     }
 
