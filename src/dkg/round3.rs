@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
 use crate::checksum::ChecksumError;
@@ -16,7 +17,7 @@ use super::round2;
 
 pub fn round3<'a, P, Q>(
     identity: &Identity,
-    secret_package: &Round2SecretPackage,
+    round2_secret_package: &Round2SecretPackage,
     round1_public_packages: P,
     round2_public_packages: Q,
 ) -> Result<(KeyPackage, PublicKeyPackage), Error>
@@ -24,46 +25,50 @@ where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     Q: IntoIterator<Item = &'a round2::PublicPackage>,
 {
-    let mut round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
-    round1_public_packages.sort_unstable_by_key(|&p| p.identity());
-    round1_public_packages.dedup();
-    let round1_public_packages = round1_public_packages;
+    let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
 
-    let self_round1_public_package = *round1_public_packages
-        .iter()
-        .find(|&p| p.identity() == identity)
-        .expect("missing public package for identity");
+    let (min_signers, max_signers) = round2::get_secret_package_signers(round2_secret_package);
+
+    // Ensure that the number of public packages provided matches max_signers
+    if round1_public_packages.len() != max_signers as usize {
+        return Err(Error::InvalidInput(format!(
+            "expected {} public packages, got {}",
+            max_signers,
+            round1_public_packages.len()
+        )));
+    }
+
+    let expected_round1_checksum = round1::input_checksum(
+        min_signers,
+        round1_public_packages.iter().map(|pkg| pkg.identity()),
+    );
 
     let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
-    for package in round1_public_packages {
-        if package.checksum() != self_round1_public_package.checksum() {
-            return Err(Error::ChecksumError(ChecksumError));
+    for public_package in round1_public_packages.clone() {
+        if public_package.checksum() != expected_round1_checksum {
+            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
 
-        if package.identity() == identity {
+        if public_package.identity() == identity {
             continue;
         }
 
         round1_frost_packages.insert(
-            package.identity().to_frost_identifier(),
-            package.frost_package().clone(),
+            public_package.identity().to_frost_identifier(),
+            public_package.frost_package().clone(),
         );
     }
 
-    let mut round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
-    round2_public_packages.sort_unstable_by_key(|&p| p.identity());
-    round2_public_packages.dedup();
-    let round2_public_packages = round2_public_packages;
+    let round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
 
-    let self_round2_public_package = *round2_public_packages
-        .iter()
-        .find(|&p| p.identity() == identity)
-        .expect("missing public package for identity");
+    let expected_round2_checksum = round2::input_checksum(
+        round1_public_packages.iter().map(Borrow::borrow),
+    );
 
     let mut round2_frost_packages: BTreeMap<Identifier, Round2Package> = BTreeMap::new();
     for package in round2_public_packages {
-        if package.checksum() != self_round2_public_package.checksum() {
-            return Err(Error::ChecksumError(ChecksumError));
+        if package.checksum() != expected_round2_checksum {
+            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
 
         if package.identity() == identity {
@@ -77,7 +82,7 @@ where
     }
 
     let (key_package, public_key_package) = part3(
-        secret_package,
+        round2_secret_package,
         &round1_frost_packages,
         &round2_frost_packages,
     )

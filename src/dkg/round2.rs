@@ -64,6 +64,24 @@ impl From<SerializableSecretPackage> for SecretPackage {
     }
 }
 
+impl<'a> From<&'a SecretPackage> for &'a SerializableSecretPackage {
+    #[inline]
+    fn from(pkg: &'a SecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
+impl<'a> From<&'a SerializableSecretPackage> for &'a SecretPackage {
+    #[inline]
+    fn from(pkg: &'a SerializableSecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
 impl SerializableSecretPackage {
     fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         writer.write_all(&self.identifier.serialize())?;
@@ -110,6 +128,11 @@ impl SerializableSecretPackage {
     }
 }
 
+pub(super) fn get_secret_package_signers(pkg: &SecretPackage) -> (u16, u16) {
+    let serializable = <&SerializableSecretPackage>::from(pkg);
+    (serializable.min_signers, serializable.max_signers)
+}
+
 pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
@@ -140,20 +163,19 @@ pub struct PublicPackage {
     checksum: Checksum,
 }
 
-fn input_checksum<P>(round1_packages: &[P]) -> Checksum
+#[must_use]
+pub(super) fn input_checksum<'a, P>(round1_packages: P) -> Checksum
 where
-    P: Borrow<round1::PublicPackage>,
+    P: IntoIterator<Item = &'a round1::PublicPackage>,
 {
     let mut hasher = ChecksumHasher::new();
 
-    let mut packages = round1_packages
-        .iter()
-        .map(Borrow::borrow)
-        .collect::<Vec<_>>();
-    packages.sort_unstable_by_key(|&p| p.identity());
-    packages.dedup();
+    let mut round1_packages = round1_packages.into_iter().collect::<Vec<_>>();
+    round1_packages.sort_unstable_by_key(|&p| p.identity());
+    round1_packages.dedup();
+    let round1_packages = round1_packages;
 
-    for package in packages {
+    for package in round1_packages {
         hasher.write(&package.serialize());
     }
 
@@ -165,7 +187,7 @@ impl PublicPackage {
     where
         P: Borrow<round1::PublicPackage>,
     {
-        let checksum = input_checksum(round1_packages);
+        let checksum = input_checksum(round1_packages.iter().map(Borrow::borrow));
 
         PublicPackage {
             identity,
