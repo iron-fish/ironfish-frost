@@ -14,12 +14,22 @@ pub(crate) type Checksum = u64;
 pub(crate) type ChecksumHasher = SipHasher24;
 
 #[derive(Clone, Debug)]
-pub struct ChecksumError;
+pub enum ChecksumError {
+    SigningCommitmentError,
+    DkgPublicPackageError,
+}
 
 impl fmt::Display for ChecksumError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt("checksum doesn't match", f)
+        match self {
+            Self::SigningCommitmentError => {
+                fmt::Display::fmt("SigningCommitment checksum doesn't match", f)
+            }
+            Self::DkgPublicPackageError => {
+                fmt::Display::fmt("PublicPackage checksum doesn't match", f)
+            }
+        }
     }
 }
 

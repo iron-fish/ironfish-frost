@@ -5,6 +5,9 @@
 use crate::checksum::Checksum;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
+use crate::dkg::error::Error;
+use crate::dkg::group_key::GroupSecretKeyShard;
+use crate::dkg::group_key::GroupSecretKeyShardSerialization;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package;
 use crate::frost::keys::dkg::round1::SecretPackage;
@@ -28,9 +31,6 @@ use std::borrow::Borrow;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
-
-use super::error::Error;
-use super::group_key::GroupSecretKeyShard;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -56,6 +56,24 @@ impl From<SecretPackage> for SerializableSecretPackage {
 impl From<SerializableSecretPackage> for SecretPackage {
     #[inline]
     fn from(pkg: SerializableSecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
+impl<'a> From<&'a SecretPackage> for &'a SerializableSecretPackage {
+    #[inline]
+    fn from(pkg: &'a SecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
+impl<'a> From<&'a SerializableSecretPackage> for &'a SecretPackage {
+    #[inline]
+    fn from(pkg: &'a SerializableSecretPackage) -> Self {
         // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
         // size, alignment, and semantics
         unsafe { mem::transmute(pkg) }
@@ -111,12 +129,17 @@ impl SerializableSecretPackage {
     }
 }
 
+pub(super) fn get_secret_package_signers(pkg: &SecretPackage) -> (u16, u16) {
+    let serializable = <&SerializableSecretPackage>::from(pkg);
+    (serializable.min_signers, serializable.max_signers)
+}
+
 pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
     csrng: R,
 ) -> io::Result<Vec<u8>> {
-    let serializable = SerializableSecretPackage::from(pkg.clone());
+    let serializable = <&SerializableSecretPackage>::from(pkg);
     if serializable.identifier != identity.to_frost_identifier() {
         return Err(io::Error::other("identity mismatch"));
     }
@@ -135,32 +158,21 @@ pub fn import_secret_package(
 }
 
 #[must_use]
-fn input_checksum<I>(min_signers: u16, participants: &[I]) -> Checksum
+pub(super) fn input_checksum<'a, I>(min_signers: u16, participants: I) -> Checksum
 where
-    I: Borrow<Identity>,
+    I: IntoIterator<Item = &'a Identity>,
 {
-    // This function is only used in `PublicPackage::new()`, which in turn is only used in
-    // `round1()`. `round1()` already takes care of sorting and deduping the participants, hence we
-    // can assume that our input does not need any further processing. The following checks that
-    // it's indeed the case, but only for debug builds.
-    #[cfg(debug_assertions)]
-    {
-        let input_participants = participants.iter().map(Borrow::borrow).collect::<Vec<_>>();
-        let mut deduped_participants = input_participants.clone();
-        deduped_participants.sort_unstable();
-        deduped_participants.dedup();
-        debug_assert_eq!(
-            input_participants, deduped_participants,
-            "participants is expected to be sorted and to contain no duplicates"
-        );
-    }
+    let mut participants = participants.into_iter().collect::<Vec<_>>();
+    participants.sort_unstable();
+    participants.dedup();
+    let participants = participants;
 
     let mut hasher = ChecksumHasher::new();
 
     hasher.write(&min_signers.to_le_bytes());
 
     for id in participants {
-        hasher.write(&id.borrow().serialize());
+        hasher.write(&id.serialize());
     }
 
     hasher.finish()
@@ -170,27 +182,36 @@ where
 pub struct PublicPackage {
     identity: Identity,
     frost_package: Package,
-    group_secret_key_shard: GroupSecretKeyShard,
+    group_secret_key_shard_encrypted:
+        MultiRecipientBlob<Vec<GroupSecretKeyShardSerialization>, Vec<u8>>,
     checksum: Checksum,
 }
 
 impl PublicPackage {
-    pub(crate) fn new<I>(
+    pub(crate) fn new<I, R>(
         identity: Identity,
         min_signers: u16,
-        signing_participants: &[I],
+        participants: &[I],
         frost_package: Package,
         group_secret_key_shard: GroupSecretKeyShard,
+        csrng: R,
     ) -> Self
     where
         I: Borrow<Identity>,
+        R: RngCore + CryptoRng,
     {
-        let checksum = input_checksum(min_signers, signing_participants);
+        let checksum = input_checksum(min_signers, participants.iter().map(Borrow::borrow));
+
+        let group_secret_key_shard_encrypted = multienc::encrypt(
+            &group_secret_key_shard.serialize(),
+            participants.iter().map(Borrow::borrow),
+            csrng,
+        );
 
         PublicPackage {
             identity,
             frost_package,
-            group_secret_key_shard,
+            group_secret_key_shard_encrypted,
             checksum,
         }
     }
@@ -203,8 +224,19 @@ impl PublicPackage {
         &self.frost_package
     }
 
-    pub fn group_secret_key_shard(&self) -> &GroupSecretKeyShard {
-        &self.group_secret_key_shard
+    pub fn group_secret_key_shard_encrypted(
+        &self,
+    ) -> &MultiRecipientBlob<Vec<GroupSecretKeyShardSerialization>, Vec<u8>> {
+        &self.group_secret_key_shard_encrypted
+    }
+
+    pub fn group_secret_key_shard(
+        &self,
+        secret: &participant::Secret,
+    ) -> io::Result<GroupSecretKeyShard> {
+        let serialized = multienc::decrypt(secret, &self.group_secret_key_shard_encrypted)
+            .map_err(io::Error::other)?;
+        GroupSecretKeyShard::deserialize_from(&serialized[..])
     }
 
     pub fn checksum(&self) -> Checksum {
@@ -221,7 +253,8 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.group_secret_key_shard.serialize())?;
+        self.group_secret_key_shard_encrypted
+            .serialize_into(&mut writer)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -232,8 +265,7 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let group_secret_key_shard =
-            GroupSecretKeyShard::deserialize_from(&mut reader).map_err(io::Error::other)?;
+        let group_secret_key_shard_encrypted = MultiRecipientBlob::deserialize_from(&mut reader)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -242,7 +274,7 @@ impl PublicPackage {
         Ok(Self {
             identity,
             frost_package,
-            group_secret_key_shard,
+            group_secret_key_shard_encrypted,
             checksum,
         })
     }
@@ -259,7 +291,6 @@ where
     R: RngCore + CryptoRng,
 {
     // Remove duplicates from `participants` to ensure that `max_signers` is calculated correctly.
-    // `Package::new()` also expects `participants` to be deduped and sorted.
     let mut participants = participants.into_iter().collect::<Vec<_>>();
     participants.sort_unstable();
     participants.dedup();
@@ -267,12 +298,12 @@ where
 
     if !participants.contains(&self_identity) {
         return Err(Error::InvalidInput(
-            "participants must include self_identity",
+            "participants must include self_identity".to_string(),
         ));
     }
 
     let max_signers = u16::try_from(participants.len())
-        .map_err(|_| Error::InvalidInput("too many participants"))?;
+        .map_err(|_| Error::InvalidInput("too many participants".to_string()))?;
 
     let (secret_package, public_package) = frost::keys::dkg::part1(
         self_identity.to_frost_identifier(),
@@ -294,6 +325,7 @@ where
         &participants,
         public_package,
         group_secret_key_shard,
+        &mut csrng,
     );
 
     Ok((encrypted_secret_package, public_package))
@@ -437,9 +469,6 @@ mod tests {
         let (_, public_package) = super::round1(identity, min_signers, &participants, &mut rng)
             .expect("dkg round 1 failed");
 
-        let mut participants = participants.to_vec();
-        participants.sort();
-        participants.dedup();
         let expected_checksum = input_checksum(min_signers, &participants);
 
         assert_eq!(expected_checksum, public_package.checksum());
@@ -477,7 +506,7 @@ mod tests {
         let identity2 = participant::Secret::random(thread_rng()).to_identity();
         let identity3 = participant::Secret::random(thread_rng()).to_identity();
 
-        let (secret_package, _) = super::round1(
+        let (secret_package, public_package) = super::round1(
             &identity1,
             2,
             [&identity1, &identity2, &identity3],
@@ -486,5 +515,9 @@ mod tests {
         .expect("round 1 failed");
 
         import_secret_package(&secret_package, &secret).expect("secret package import failed");
+
+        public_package
+            .group_secret_key_shard(&secret)
+            .expect("group secret key shard decryption failed");
     }
 }

@@ -9,7 +9,7 @@ use std::io;
 
 #[derive(Debug)]
 pub enum Error {
-    InvalidInput(&'static str),
+    InvalidInput(String),
     FrostError(frost::Error),
     EncryptionError(io::Error),
     ChecksumError(ChecksumError),

@@ -6,8 +6,9 @@ use crate::checksum::Checksum;
 use crate::checksum::ChecksumError;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
+use crate::dkg::error::Error;
+use crate::dkg::round1;
 use crate::frost;
-use crate::frost::keys::dkg::round1::Package as Round1Package;
 use crate::frost::keys::dkg::round1::SecretPackage as Round1SecretPackage;
 use crate::frost::keys::dkg::round2::Package;
 use crate::frost::keys::dkg::round2::SecretPackage;
@@ -32,10 +33,6 @@ use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::io;
 use std::mem;
-
-use super::error::Error;
-use super::group_key::GroupSecretKeyShard;
-use super::round1;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -143,8 +140,10 @@ pub struct PublicPackage {
     checksum: Checksum,
 }
 
-#[allow(dead_code)]
-fn input_checksum(round1_packages: &[round1::PublicPackage]) -> Checksum {
+fn input_checksum<P>(round1_packages: &[P]) -> Checksum
+where
+    P: Borrow<round1::PublicPackage>,
+{
     let mut hasher = ChecksumHasher::new();
 
     let mut packages = round1_packages
@@ -162,12 +161,10 @@ fn input_checksum(round1_packages: &[round1::PublicPackage]) -> Checksum {
 }
 
 impl PublicPackage {
-    #[allow(dead_code)]
-    pub(crate) fn new(
-        identity: Identity,
-        round1_packages: &[round1::PublicPackage],
-        frost_package: Package,
-    ) -> Self {
+    pub(crate) fn new<P>(identity: Identity, round1_packages: &[P], frost_package: Package) -> Self
+    where
+        P: Borrow<round1::PublicPackage>,
+    {
         let checksum = input_checksum(round1_packages);
 
         PublicPackage {
@@ -226,55 +223,91 @@ pub fn round2<'a, P, R: RngCore + CryptoRng>(
     round1_secret_package: &Round1SecretPackage,
     round1_public_packages: P,
     mut csrng: R,
-) -> Result<(Vec<u8>, BTreeMap<Identifier, Package>), Error>
+) -> Result<(Vec<u8>, BTreeMap<Identity, PublicPackage>), Error>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
 {
-    let mut round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
-    round1_public_packages.sort_unstable_by_key(|&p| p.identity());
-    round1_public_packages.dedup();
-    let round1_public_packages = round1_public_packages;
+    let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
 
-    let self_public_package = *round1_public_packages
-        .iter()
-        .find(|&p| p.identity() == self_identity)
-        .expect("missing public package for self_identity");
+    // Extract the min/max signers from the secret package
+    let (min_signers, max_signers) = round1::get_secret_package_signers(round1_secret_package);
 
-    let mut frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
-    let mut group_secret_key_shards: Vec<&GroupSecretKeyShard> = Vec::new();
-
-    for public_package in round1_public_packages {
-        if public_package.checksum() != self_public_package.checksum() {
-            return Err(Error::ChecksumError(ChecksumError));
-        }
-
-        group_secret_key_shards.push(public_package.group_secret_key_shard());
-
-        // self_public_package must be excluded from frost::keys::dkg::part2 inputs
-        if public_package.identity() == self_identity {
-            continue;
-        }
-
-        frost_packages.insert(
-            public_package.identity().to_frost_identifier(),
-            public_package.frost_package().clone(),
-        );
+    // Ensure that the number of public packages provided matches max_signers
+    if round1_public_packages.len() != max_signers as usize {
+        return Err(Error::InvalidInput(format!(
+            "expected {} public packages, got {}",
+            max_signers,
+            round1_public_packages.len()
+        )));
     }
 
+    // Compute the expected checksum for the public packages
+    let expected_checksum = round1::input_checksum(
+        min_signers,
+        round1_public_packages.iter().map(|pkg| pkg.identity()),
+    );
+
+    // Build the BTree of FROST public packages from our public packages, making sure that the
+    // checksums match, and that every identity was used only once
+    let mut identities = BTreeMap::new();
+    let mut frost_packages = BTreeMap::new();
+    for public_package in &round1_public_packages {
+        if public_package.checksum() != expected_checksum {
+            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
+        }
+
+        let identity = public_package.identity();
+        let frost_identifier = identity.to_frost_identifier();
+        let frost_package = public_package.frost_package().clone();
+
+        if frost_packages
+            .insert(frost_identifier, frost_package)
+            .is_some()
+        {
+            return Err(Error::InvalidInput(format!(
+                "multiple public packages provided for identity {}",
+                public_package.identity()
+            )));
+        }
+
+        identities.insert(frost_identifier, identity);
+    }
+
+    // Sanity check
+    assert_eq!(round1_public_packages.len(), identities.len());
+    assert_eq!(round1_public_packages.len(), frost_packages.len());
+
+    // The public package for `self_identity` must be excluded from `frost::keys::dkg::part2`
+    // inputs
+    frost_packages
+        .remove(&self_identity.to_frost_identifier())
+        .expect("missing public package for self_identity");
+
+    // Run the FROST DKG round 2
     let (round2_secret_package, round2_packages) =
         frost::keys::dkg::part2(round1_secret_package.clone(), &frost_packages)
             .map_err(Error::FrostError)?;
 
+    // Encrypt the secret package
     let encrypted_secret_package =
         export_secret_package(&round2_secret_package, self_identity, &mut csrng)
             .map_err(Error::EncryptionError)?;
 
-    // TODO add group_secret_key to PublicPackage structs
-    // let group_secret_key = GroupSecretKeyShard::combine(group_secret_key_shards);
+    // Convert the Identifier->Package map to an Identity->PublicPackage map
+    let mut round2_public_packages = BTreeMap::new();
+    for (identifier, package) in round2_packages {
+        let identity = *identities
+            .get(&identifier)
+            .expect("round2 generated package for unknown identifier");
 
-    // TODO return round2::PublicPackage structs
-    Ok((encrypted_secret_package, round2_packages))
+        let public_package =
+            PublicPackage::new(identity.clone(), &round1_public_packages[..], package);
+
+        round2_public_packages.insert(identity.clone(), public_package);
+    }
+
+    Ok((encrypted_secret_package, round2_public_packages))
 }
 
 #[cfg(test)]
@@ -318,7 +351,6 @@ mod tests {
         }
 
         let secret = secrets[0].clone();
-        let _id = secret.to_identity().to_frost_identifier();
         let round1_secret_pkg = secret_packages[0].clone();
 
         (secret, round1_secret_pkg, public_packages)
@@ -469,7 +501,7 @@ mod tests {
         let round1_secret_package = round1::import_secret_package(&round1_secret_package, &secret)
             .expect("secret package import failed");
 
-        let (secret_package, _) = super::round2(
+        let (secret_package, round2_public_packages) = super::round2(
             &identity1,
             &round1_secret_package,
             [&package1, &package2, &package3],
@@ -479,5 +511,78 @@ mod tests {
 
         import_secret_package(&secret_package, &secret)
             .expect("round 2 secret package import failed");
+
+        round2_public_packages
+            .get(&identity2)
+            .expect("round 2 public packages missing package for identity2");
+        round2_public_packages
+            .get(&identity3)
+            .expect("round 2 public packages missing package for identity3");
+    }
+
+    #[test]
+    fn round2_duplicate_packages() {
+        let secret = participant::Secret::random(thread_rng());
+        let identities = [
+            secret.to_identity(),
+            participant::Secret::random(thread_rng()).to_identity(),
+            participant::Secret::random(thread_rng()).to_identity(),
+        ];
+
+        let round1_packages = identities
+            .iter()
+            .map(|id| round1::round1(id, 2, &identities, thread_rng()).expect("dkg round 1 failed"))
+            .collect::<Vec<_>>();
+
+        let round1_secret_package = round1::import_secret_package(&round1_packages[0].0, &secret)
+            .expect("secret package import failed");
+
+        let result = super::round2(
+            &identities[0],
+            &round1_secret_package,
+            [
+                &round1_packages[0].1,
+                &round1_packages[0].1,
+                &round1_packages[1].1,
+                &round1_packages[2].1,
+            ],
+            thread_rng(),
+        );
+
+        match result {
+            Err(Error::InvalidInput(_)) => (),
+            _ => panic!("dkg round2 should have failed with InvalidInput"),
+        }
+    }
+
+    #[test]
+    fn round2_missing_packages() {
+        let secret = participant::Secret::random(thread_rng());
+        let identities = [
+            secret.to_identity(),
+            participant::Secret::random(thread_rng()).to_identity(),
+            participant::Secret::random(thread_rng()).to_identity(),
+        ];
+
+        let round1_packages = identities
+            .iter()
+            .map(|id| round1::round1(id, 2, &identities, thread_rng()).expect("dkg round 1 failed"))
+            .collect::<Vec<_>>();
+
+        let round1_secret_package = round1::import_secret_package(&round1_packages[0].0, &secret)
+            .expect("secret package import failed");
+
+        let result = super::round2(
+            &identities[0],
+            &round1_secret_package,
+            [&round1_packages[0].1, &round1_packages[1].1],
+            thread_rng(),
+        );
+
+        // We can use `assert_matches` once it's stabilized
+        match result {
+            Err(Error::InvalidInput(_)) => (),
+            _ => panic!("dkg round2 should have failed with InvalidInput"),
+        }
     }
 }
