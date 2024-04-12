@@ -54,6 +54,7 @@ where
         round1_public_packages.iter().map(|pkg| pkg.identity()),
     );
 
+    let mut gsk_shards = Vec::new();
     let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
     for public_package in round1_public_packages.clone() {
         if public_package.checksum() != expected_round1_checksum {
@@ -74,6 +75,11 @@ where
             )));
         }
 
+        gsk_shards.push(
+            public_package
+                .group_secret_key_shard(secret)
+                .expect("could not decrypt gsk shard with secret"),
+        );
         round1_frost_packages.insert(
             public_package.identity().to_frost_identifier(),
             public_package.frost_package().clone(),
@@ -134,16 +140,11 @@ where
     )
     .map_err(Error::FrostError)?;
 
-    let gsk_shards = round1_public_packages
-        .iter()
-        .map(|p| {
-            p.group_secret_key_shard(secret)
-                .expect("cannot decrypt gsk shard")
-        })
-        .collect::<Vec<_>>();
-    let gsk = GroupSecretKeyShard::combine(&gsk_shards);
-
-    Ok((key_package, public_key_package, gsk))
+    Ok((
+        key_package,
+        public_key_package,
+        GroupSecretKeyShard::combine(&gsk_shards),
+    ))
 }
 
 #[cfg(test)]
