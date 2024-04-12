@@ -81,9 +81,8 @@ where
         .expect("missing public package for identity");
 
     let round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
-    let expected_round2_checksum = round2::input_checksum(
-        round1_public_packages.iter().map(Borrow::borrow),
-    );
+    let expected_round2_checksum =
+        round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
 
     let mut round2_frost_packages: BTreeMap<Identifier, Round2Package> = BTreeMap::new();
     for public_package in round2_public_packages {
@@ -91,7 +90,7 @@ where
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
 
-        let identity = public_package.identity();
+        let identity = public_package.sender_identity();
         let frost_identifier = identity.to_frost_identifier();
         let frost_package = public_package.frost_package().clone();
 
@@ -101,12 +100,12 @@ where
         {
             return Err(Error::InvalidInput(format!(
                 "multiple public packages provided for identity {}",
-                public_package.identity()
+                public_package.sender_identity()
             )));
         }
 
         round2_frost_packages.insert(
-            public_package.identity().to_frost_identifier(),
+            public_package.sender_identity().to_frost_identifier(),
             public_package.frost_package().clone(),
         );
     }
@@ -165,8 +164,9 @@ mod tests {
         )
         .expect("round 1 failed");
 
-        let round1_secret_package_1 = round1::import_secret_package(&round1_secret_package_1, &secret1)
-            .expect("secret package import failed");
+        let round1_secret_package_1 =
+            round1::import_secret_package(&round1_secret_package_1, &secret1)
+                .expect("secret package import failed");
         let (encrypted_secret_package, _) = round2::round2(
             &identity1,
             &round1_secret_package_1,
@@ -175,8 +175,9 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let round1_secret_package_2 = round1::import_secret_package(&round1_secret_package_2, &secret2)
-            .expect("secret package import failed");
+        let round1_secret_package_2 =
+            round1::import_secret_package(&round1_secret_package_2, &secret2)
+                .expect("secret package import failed");
         let (_, round2_public_packages_2) = round2::round2(
             &identity2,
             &round1_secret_package_2,
@@ -185,8 +186,9 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let round1_secret_package_3 = round1::import_secret_package(&round1_secret_package_3, &secret3)
-            .expect("secret package import failed");
+        let round1_secret_package_3 =
+            round1::import_secret_package(&round1_secret_package_3, &secret3)
+                .expect("secret package import failed");
         let (_, round2_public_packages_3) = round2::round2(
             &identity3,
             &round1_secret_package_3,
@@ -196,14 +198,20 @@ mod tests {
         .expect("round 2 failed");
 
         let round2_public_packages = [
-            round2_public_packages_2.get(&identity1).expect("should have package for identity1"),
-            round2_public_packages_3.get(&identity1).expect("should have package for identity1"),
+            round2_public_packages_2
+                .iter()
+                .find(|p| p.recipient_identity().eq(&identity1))
+                .expect("should have package for identity1"),
+            round2_public_packages_3
+                .iter()
+                .find(|p| p.recipient_identity().eq(&identity1))
+                .expect("should have package for identity1"),
         ];
 
         let secret_package = import_secret_package(&encrypted_secret_package, &secret1)
             .expect("round 2 secret package import failed");
 
-        let (key_package, public_key_package) = round3(
+        round3(
             &identity1,
             &secret_package,
             [&package1, &package2, &package3],
