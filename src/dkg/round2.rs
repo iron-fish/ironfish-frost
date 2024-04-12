@@ -8,6 +8,7 @@ use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
 use crate::dkg::error::Error;
 use crate::dkg::round1;
+use crate::dkg::utils::build_round1_frost_packages;
 use crate::frost;
 use crate::frost::keys::dkg::round1::SecretPackage as Round1SecretPackage;
 use crate::frost::keys::dkg::round2::Package;
@@ -269,46 +270,8 @@ where
     // Extract the min/max signers from the secret package
     let (min_signers, max_signers) = round1::get_secret_package_signers(round1_secret_package);
 
-    // Ensure that the number of public packages provided matches max_signers
-    if round1_public_packages.len() != max_signers as usize {
-        return Err(Error::InvalidInput(format!(
-            "expected {} public packages, got {}",
-            max_signers,
-            round1_public_packages.len()
-        )));
-    }
-
-    // Compute the expected checksum for the public packages
-    let expected_checksum = round1::input_checksum(
-        min_signers,
-        round1_public_packages.iter().map(|pkg| pkg.identity()),
-    );
-
-    // Build the BTree of FROST public packages from our public packages, making sure that the
-    // checksums match, and that every identity was used only once
-    let mut identities = BTreeMap::new();
-    let mut frost_packages = BTreeMap::new();
-    for public_package in &round1_public_packages {
-        if public_package.checksum() != expected_checksum {
-            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
-        }
-
-        let identity = public_package.identity();
-        let frost_identifier = identity.to_frost_identifier();
-        let frost_package = public_package.frost_package().clone();
-
-        if frost_packages
-            .insert(frost_identifier, frost_package)
-            .is_some()
-        {
-            return Err(Error::InvalidInput(format!(
-                "multiple public packages provided for identity {}",
-                public_package.identity()
-            )));
-        }
-
-        identities.insert(frost_identifier, identity);
-    }
+    let (identities, mut frost_packages) =
+        build_round1_frost_packages(round1_public_packages.clone(), min_signers, max_signers)?;
 
     // Sanity check
     assert_eq!(round1_public_packages.len(), identities.len());
