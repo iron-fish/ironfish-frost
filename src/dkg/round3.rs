@@ -7,11 +7,11 @@ use std::collections::BTreeMap;
 
 use crate::checksum::ChecksumError;
 use crate::dkg::group_key::GroupSecretKeyShard;
-use crate::dkg::utils::build_round1_frost_packages;
+
 use crate::frost::keys::dkg::round1::Package as Round1Package;
 use crate::frost::keys::dkg::round2::Package as Round2Package;
 use crate::frost::keys::dkg::round2::SecretPackage as Round2SecretPackage;
-use crate::participant::Identity;
+
 use crate::participant::Secret;
 use reddsa::frost::redjubjub::keys::dkg::part3;
 use reddsa::frost::redjubjub::keys::KeyPackage;
@@ -38,8 +38,51 @@ where
 
     let (min_signers, max_signers) = round2::get_secret_package_signers(round2_secret_package);
 
-    let (_, mut round1_frost_packages) =
-        build_round1_frost_packages(round1_public_packages.clone(), min_signers, max_signers)?;
+    let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
+
+    // Ensure that the number of public packages provided matches max_signers
+    if round1_public_packages.len() != max_signers as usize {
+        return Err(Error::InvalidInput(format!(
+            "expected {} public packages, got {}",
+            max_signers,
+            round1_public_packages.len()
+        )));
+    }
+
+    let expected_round1_checksum = round1::input_checksum(
+        min_signers,
+        round1_public_packages.iter().map(|pkg| pkg.identity()),
+    );
+
+    let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
+    for public_package in round1_public_packages.clone() {
+        if public_package.checksum() != expected_round1_checksum {
+            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
+        }
+
+        let identity = public_package.identity();
+        let frost_identifier = identity.to_frost_identifier();
+        let frost_package = public_package.frost_package().clone();
+
+        if round1_frost_packages
+            .insert(frost_identifier, frost_package)
+            .is_some()
+        {
+            return Err(Error::InvalidInput(format!(
+                "multiple public packages provided for identity {}",
+                public_package.identity()
+            )));
+        }
+
+        round1_frost_packages.insert(
+            public_package.identity().to_frost_identifier(),
+            public_package.frost_package().clone(),
+        );
+    }
+
+    // Sanity check
+    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
+
     // The public package for `identity` must be excluded from `frost::keys::dkg::part3`
     // inputs
     round1_frost_packages
