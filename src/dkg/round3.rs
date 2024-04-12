@@ -132,6 +132,122 @@ mod tests {
     use rand::thread_rng;
 
     #[test]
+    fn test_round3_missing_round1_packages() {
+        let secret1 = Secret::random(thread_rng());
+        let secret2 = Secret::random(thread_rng());
+        let identity1 = secret1.to_identity();
+        let identity2 = secret2.to_identity();
+
+        let (round1_secret_package_1, package1) =
+            round1::round1(&identity1, 2, [&identity1, &identity2], thread_rng())
+                .expect("round 1 failed");
+
+        let (round1_secret_package_2, package2) =
+            round1::round1(&identity2, 2, [&identity1, &identity2], thread_rng())
+                .expect("round 1 failed");
+
+        let round1_secret_package_1 =
+            round1::import_secret_package(&round1_secret_package_1, &secret1)
+                .expect("secret package import failed");
+        let (encrypted_secret_package, _) = round2::round2(
+            &identity1,
+            &round1_secret_package_1,
+            [&package1, &package2],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let round1_secret_package_2 =
+            round1::import_secret_package(&round1_secret_package_2, &secret2)
+                .expect("secret package import failed");
+        let (_, round2_public_packages_2) = round2::round2(
+            &identity2,
+            &round1_secret_package_2,
+            [&package1, &package2],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let round2_public_packages = [round2_public_packages_2
+            .iter()
+            .find(|p| p.recipient_identity().eq(&identity1))
+            .expect("should have package for identity1")];
+
+        let secret_package = import_secret_package(&encrypted_secret_package, &secret1)
+            .expect("round 2 secret package import failed");
+
+        let result = round3(
+            &identity1,
+            &secret_package,
+            [&package2],
+            round2_public_packages,
+        );
+
+        match result {
+            Err(Error::InvalidInput(_)) => (),
+            _ => panic!("dkg round3 should have failed with InvalidInput"),
+        }
+    }
+
+    #[test]
+    fn test_round3_invalid_round1_checksum() {
+        let secret1 = Secret::random(thread_rng());
+        let secret2 = Secret::random(thread_rng());
+        let identity1 = secret1.to_identity();
+        let identity2 = secret2.to_identity();
+
+        let (round1_secret_package_1, package1) =
+            round1::round1(&identity1, 2, [&identity1, &identity2], thread_rng())
+                .expect("round 1 failed");
+
+        let (round1_secret_package_2, package2) =
+            round1::round1(&identity2, 2, [&identity1, &identity2], thread_rng())
+                .expect("round 1 failed");
+
+        let round1_secret_package_1 =
+            round1::import_secret_package(&round1_secret_package_1, &secret1)
+                .expect("secret package import failed");
+        let (encrypted_secret_package, _) = round2::round2(
+            &identity1,
+            &round1_secret_package_1,
+            [&package1, &package2],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let round1_secret_package_2 =
+            round1::import_secret_package(&round1_secret_package_2, &secret2)
+                .expect("secret package import failed");
+        let (_, round2_public_packages_2) = round2::round2(
+            &identity2,
+            &round1_secret_package_2,
+            [&package1, &package2],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let round2_public_packages = [round2_public_packages_2
+            .iter()
+            .find(|p| p.recipient_identity().eq(&identity1))
+            .expect("should have package for identity1")];
+
+        let secret_package = import_secret_package(&encrypted_secret_package, &secret1)
+            .expect("round 2 secret package import failed");
+
+        let result = round3(
+            &identity1,
+            &secret_package,
+            [&package1, &package1],
+            round2_public_packages,
+        );
+
+        match result {
+            Err(Error::ChecksumError(_)) => (),
+            _ => panic!("dkg round3 should have failed with ChecksumError"),
+        }
+    }
+
+    #[test]
     fn test_round3() {
         let secret1 = Secret::random(thread_rng());
         let secret2 = Secret::random(thread_rng());
