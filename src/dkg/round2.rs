@@ -3,12 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::checksum::Checksum;
+
 use crate::checksum::ChecksumError;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
 use crate::dkg::error::Error;
 use crate::dkg::round1;
 use crate::frost;
+use crate::frost::keys::dkg::round1::Package as Round1Package;
 use crate::frost::keys::dkg::round1::SecretPackage as Round1SecretPackage;
 use crate::frost::keys::dkg::round2::Package;
 use crate::frost::keys::dkg::round2::SecretPackage;
@@ -29,6 +31,7 @@ use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::borrow::Borrow;
+
 use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::io;
@@ -58,6 +61,24 @@ impl From<SecretPackage> for SerializableSecretPackage {
 impl From<SerializableSecretPackage> for SecretPackage {
     #[inline]
     fn from(pkg: SerializableSecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
+impl<'a> From<&'a SecretPackage> for &'a SerializableSecretPackage {
+    #[inline]
+    fn from(pkg: &'a SecretPackage) -> Self {
+        // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
+        // size, alignment, and semantics
+        unsafe { mem::transmute(pkg) }
+    }
+}
+
+impl<'a> From<&'a SerializableSecretPackage> for &'a SecretPackage {
+    #[inline]
+    fn from(pkg: &'a SerializableSecretPackage) -> Self {
         // SAFETY: The fields of `SecretPackage` and `SerializableSecretPackage` have the same
         // size, alignment, and semantics
         unsafe { mem::transmute(pkg) }
@@ -110,6 +131,11 @@ impl SerializableSecretPackage {
     }
 }
 
+pub(super) fn get_secret_package_signers(pkg: &SecretPackage) -> (u16, u16) {
+    let serializable = <&SerializableSecretPackage>::from(pkg);
+    (serializable.min_signers, serializable.max_signers)
+}
+
 pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
@@ -141,20 +167,19 @@ pub struct PublicPackage {
     checksum: Checksum,
 }
 
-fn input_checksum<P>(round1_packages: &[P]) -> Checksum
+#[must_use]
+pub(super) fn input_checksum<'a, P>(round1_packages: P) -> Checksum
 where
-    P: Borrow<round1::PublicPackage>,
+    P: IntoIterator<Item = &'a round1::PublicPackage>,
 {
     let mut hasher = ChecksumHasher::new();
 
-    let mut packages = round1_packages
-        .iter()
-        .map(Borrow::borrow)
-        .collect::<Vec<_>>();
-    packages.sort_unstable_by_key(|&p| p.identity());
-    packages.dedup();
+    let mut round1_packages = round1_packages.into_iter().collect::<Vec<_>>();
+    round1_packages.sort_unstable_by_key(|&p| p.identity());
+    round1_packages.dedup();
+    let round1_packages = round1_packages;
 
-    for package in packages {
+    for package in round1_packages {
         hasher.write(&package.serialize());
     }
 
@@ -171,7 +196,7 @@ impl PublicPackage {
     where
         P: Borrow<round1::PublicPackage>,
     {
-        let checksum = input_checksum(round1_packages);
+        let checksum = input_checksum(round1_packages.iter().map(Borrow::borrow));
 
         PublicPackage {
             sender_identity,
@@ -247,6 +272,8 @@ where
     // Extract the min/max signers from the secret package
     let (min_signers, max_signers) = round1::get_secret_package_signers(round1_secret_package);
 
+    let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
+
     // Ensure that the number of public packages provided matches max_signers
     if round1_public_packages.len() != max_signers as usize {
         return Err(Error::InvalidInput(format!(
@@ -256,18 +283,15 @@ where
         )));
     }
 
-    // Compute the expected checksum for the public packages
-    let expected_checksum = round1::input_checksum(
+    let expected_round1_checksum = round1::input_checksum(
         min_signers,
         round1_public_packages.iter().map(|pkg| pkg.identity()),
     );
 
-    // Build the BTree of FROST public packages from our public packages, making sure that the
-    // checksums match, and that every identity was used only once
     let mut identities = BTreeMap::new();
-    let mut frost_packages = BTreeMap::new();
-    for public_package in &round1_public_packages {
-        if public_package.checksum() != expected_checksum {
+    let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
+    for public_package in round1_public_packages.clone() {
+        if public_package.checksum() != expected_round1_checksum {
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
 
@@ -275,7 +299,7 @@ where
         let frost_identifier = identity.to_frost_identifier();
         let frost_package = public_package.frost_package().clone();
 
-        if frost_packages
+        if round1_frost_packages
             .insert(frost_identifier, frost_package)
             .is_some()
         {
@@ -286,21 +310,25 @@ where
         }
 
         identities.insert(frost_identifier, identity);
+        round1_frost_packages.insert(
+            public_package.identity().to_frost_identifier(),
+            public_package.frost_package().clone(),
+        );
     }
 
     // Sanity check
     assert_eq!(round1_public_packages.len(), identities.len());
-    assert_eq!(round1_public_packages.len(), frost_packages.len());
+    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
 
     // The public package for `self_identity` must be excluded from `frost::keys::dkg::part2`
     // inputs
-    frost_packages
+    round1_frost_packages
         .remove(&self_identity.to_frost_identifier())
         .expect("missing public package for self_identity");
 
     // Run the FROST DKG round 2
     let (round2_secret_package, round2_packages) =
-        frost::keys::dkg::part2(round1_secret_package.clone(), &frost_packages)
+        frost::keys::dkg::part2(round1_secret_package.clone(), &round1_frost_packages)
             .map_err(Error::FrostError)?;
 
     // Encrypt the secret package
