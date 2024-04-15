@@ -12,6 +12,7 @@ pub enum Error {
     InvalidInput(String),
     FrostError(frost::Error),
     EncryptionError(io::Error),
+    DecryptionError(io::Error),
     ChecksumError(ChecksumError),
 }
 
@@ -28,6 +29,10 @@ impl fmt::Display for Error {
             }
             Self::EncryptionError(e) => {
                 write!(f, "encryption error: ")?;
+                e.fmt(f)
+            }
+            Self::DecryptionError(e) => {
+                write!(f, "decryption error: ")?;
                 e.fmt(f)
             }
             Self::ChecksumError(e) => {
