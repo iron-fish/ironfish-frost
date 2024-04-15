@@ -2,26 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::borrow::Borrow;
-use std::collections::BTreeMap;
-
 use crate::checksum::ChecksumError;
+use crate::dkg::error::Error;
+use crate::dkg::group_key::GroupSecretKey;
 use crate::dkg::group_key::GroupSecretKeyShard;
-
-use crate::frost::keys::dkg::round1::Package as Round1Package;
-use crate::frost::keys::dkg::round2::Package as Round2Package;
+use crate::dkg::round1;
+use crate::dkg::round2;
 use crate::frost::keys::dkg::round2::SecretPackage as Round2SecretPackage;
-
 use crate::participant::Secret;
 use reddsa::frost::redjubjub::keys::dkg::part3;
 use reddsa::frost::redjubjub::keys::KeyPackage;
 use reddsa::frost::redjubjub::keys::PublicKeyPackage;
-use reddsa::frost::redjubjub::Identifier;
-
-use super::error::Error;
-use super::group_key::GroupSecretKey;
-use super::round1;
-use super::round2;
+use std::borrow::Borrow;
+use std::collections::BTreeMap;
 
 pub fn round3<'a, P, Q>(
     secret: &Secret,
@@ -35,17 +28,26 @@ where
 {
     let identity = secret.to_identity();
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
+    let round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
 
     let (min_signers, max_signers) = round2::get_secret_package_signers(round2_secret_package);
 
-    let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
-
     // Ensure that the number of public packages provided matches max_signers
-    if round1_public_packages.len() != max_signers as usize {
+    let expected_round1_packages = max_signers as usize;
+    if round1_public_packages.len() != expected_round1_packages {
         return Err(Error::InvalidInput(format!(
-            "expected {} public packages, got {}",
-            max_signers,
+            "expected {} round 1 public packages, got {}",
+            expected_round1_packages,
             round1_public_packages.len()
+        )));
+    }
+
+    let expected_round2_packages = expected_round1_packages.saturating_sub(1);
+    if round2_public_packages.len() != expected_round2_packages {
+        return Err(Error::InvalidInput(format!(
+            "expected {} round 2 public packages, got {}",
+            expected_round2_packages,
+            round2_public_packages.len()
         )));
     }
 
@@ -55,8 +57,8 @@ where
     );
 
     let mut gsk_shards = Vec::new();
-    let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
-    for public_package in round1_public_packages.clone() {
+    let mut round1_frost_packages = BTreeMap::new();
+    for public_package in round1_public_packages.iter() {
         if public_package.checksum() != expected_round1_checksum {
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
@@ -75,15 +77,10 @@ where
             )));
         }
 
-        gsk_shards.push(
-            public_package
-                .group_secret_key_shard(secret)
-                .expect("could not decrypt gsk shard with secret"),
-        );
-        round1_frost_packages.insert(
-            public_package.identity().to_frost_identifier(),
-            public_package.frost_package().clone(),
-        );
+        let gsk_shard = public_package
+            .group_secret_key_shard(secret)
+            .map_err(Error::DecryptionError)?;
+        gsk_shards.push(gsk_shard);
     }
 
     // Sanity check
@@ -95,12 +92,11 @@ where
         .remove(&identity.to_frost_identifier())
         .expect("missing public package for identity");
 
-    let round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
     let expected_round2_checksum =
         round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
 
-    let mut round2_frost_packages: BTreeMap<Identifier, Round2Package> = BTreeMap::new();
-    for public_package in round2_public_packages {
+    let mut round2_frost_packages = BTreeMap::new();
+    for public_package in round2_public_packages.iter() {
         if public_package.checksum() != expected_round2_checksum {
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
         }
@@ -124,14 +120,9 @@ where
                 public_package.sender_identity()
             )));
         }
-
-        round2_frost_packages.insert(
-            public_package.sender_identity().to_frost_identifier(),
-            public_package.frost_package().clone(),
-        );
     }
 
-    assert_eq!(round1_frost_packages.len(), round2_frost_packages.len());
+    assert_eq!(round2_public_packages.len(), round2_frost_packages.len());
 
     let (key_package, public_key_package) = part3(
         round2_secret_package,
@@ -149,10 +140,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use self::round2::import_secret_package;
-
     use super::*;
     use crate::dkg::round1;
+    use crate::dkg::round2::import_secret_package;
     use crate::participant::Secret;
     use rand::thread_rng;
 
