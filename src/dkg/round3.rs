@@ -8,17 +8,17 @@ use crate::dkg::group_key::GroupSecretKey;
 use crate::dkg::group_key::GroupSecretKeyShard;
 use crate::dkg::round1;
 use crate::dkg::round2;
-use crate::frost::keys::dkg::round2::SecretPackage as Round2SecretPackage;
+use crate::dkg::round2::import_secret_package;
+use crate::frost::keys::dkg::part3;
+use crate::frost::keys::KeyPackage;
+use crate::frost::keys::PublicKeyPackage;
 use crate::participant::Secret;
-use reddsa::frost::redjubjub::keys::dkg::part3;
-use reddsa::frost::redjubjub::keys::KeyPackage;
-use reddsa::frost::redjubjub::keys::PublicKeyPackage;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
 
 pub fn round3<'a, P, Q>(
     secret: &Secret,
-    round2_secret_package: &Round2SecretPackage,
+    round2_secret_package: &[u8],
     round1_public_packages: P,
     round2_public_packages: Q,
 ) -> Result<(KeyPackage, PublicKeyPackage, GroupSecretKey), Error>
@@ -27,10 +27,12 @@ where
     Q: IntoIterator<Item = &'a round2::PublicPackage>,
 {
     let identity = secret.to_identity();
+    let round2_secret_package =
+        import_secret_package(round2_secret_package, secret).map_err(Error::DecryptionError)?;
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
     let round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
 
-    let (min_signers, max_signers) = round2::get_secret_package_signers(round2_secret_package);
+    let (min_signers, max_signers) = round2::get_secret_package_signers(&round2_secret_package);
 
     // Ensure that the number of public packages provided matches max_signers
     let expected_round1_packages = max_signers as usize;
@@ -125,7 +127,7 @@ where
     assert_eq!(round2_public_packages.len(), round2_frost_packages.len());
 
     let (key_package, public_key_package) = part3(
-        round2_secret_package,
+        &round2_secret_package,
         &round1_frost_packages,
         &round2_frost_packages,
     )
@@ -142,7 +144,6 @@ where
 mod tests {
     use super::*;
     use crate::dkg::round1;
-    use crate::dkg::round2::import_secret_package;
     use crate::participant::Secret;
     use rand::thread_rng;
 
@@ -188,12 +189,9 @@ mod tests {
             .find(|p| p.recipient_identity().eq(&identity1))
             .expect("should have package for identity1")];
 
-        let secret_package = import_secret_package(&encrypted_secret_package, &secret1)
-            .expect("round 2 secret package import failed");
-
         let result = round3(
             &secret1,
-            &secret_package,
+            &encrypted_secret_package,
             [&package2],
             round2_public_packages,
         );
@@ -246,12 +244,9 @@ mod tests {
             .find(|p| p.recipient_identity().eq(&identity1))
             .expect("should have package for identity1")];
 
-        let secret_package = import_secret_package(&encrypted_secret_package, &secret1)
-            .expect("round 2 secret package import failed");
-
         let result = round3(
             &secret1,
-            &secret_package,
+            &encrypted_secret_package,
             [&package1, &package1],
             round2_public_packages,
         );
@@ -339,12 +334,9 @@ mod tests {
                 .expect("should have package for identity1"),
         ];
 
-        let secret_package = import_secret_package(&encrypted_secret_package, &secret1)
-            .expect("round 2 secret package import failed");
-
         round3(
             &secret1,
-            &secret_package,
+            &encrypted_secret_package,
             [&package1, &package2, &package3],
             round2_public_packages,
         )
