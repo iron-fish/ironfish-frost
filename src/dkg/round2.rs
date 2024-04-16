@@ -11,7 +11,6 @@ use crate::dkg::error::Error;
 use crate::dkg::round1;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package as Round1Package;
-use crate::frost::keys::dkg::round1::SecretPackage as Round1SecretPackage;
 use crate::frost::keys::dkg::round2::Package;
 use crate::frost::keys::dkg::round2::SecretPackage;
 use crate::frost::keys::VerifiableSecretSharingCommitment;
@@ -258,8 +257,8 @@ impl PublicPackage {
 }
 
 pub fn round2<'a, P, R>(
-    self_identity: &Identity,
-    round1_secret_package: &Round1SecretPackage,
+    secret: &participant::Secret,
+    round1_secret_package: &[u8],
     round1_public_packages: P,
     mut csrng: R,
 ) -> Result<(Vec<u8>, Vec<PublicPackage>), Error>
@@ -267,10 +266,12 @@ where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
 {
-    let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
+    let self_identity = secret.to_identity();
+    let round1_secret_package = round1::import_secret_package(round1_secret_package, secret)
+        .map_err(Error::DecryptionError)?;
 
     // Extract the min/max signers from the secret package
-    let (min_signers, max_signers) = round1::get_secret_package_signers(round1_secret_package);
+    let (min_signers, max_signers) = round1::get_secret_package_signers(&round1_secret_package);
 
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
 
@@ -333,7 +334,7 @@ where
 
     // Encrypt the secret package
     let encrypted_secret_package =
-        export_secret_package(&round2_secret_package, self_identity, &mut csrng)
+        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)
             .map_err(Error::EncryptionError)?;
 
     // Convert the Identifier->Package map to an Identity->PublicPackage map
@@ -545,11 +546,8 @@ mod tests {
         )
         .expect("round 1 failed");
 
-        let round1_secret_package = round1::import_secret_package(&round1_secret_package, &secret)
-            .expect("secret package import failed");
-
         let (secret_package, round2_public_packages) = super::round2(
-            &identity1,
+            &secret,
             &round1_secret_package,
             [&package1, &package2, &package3],
             thread_rng(),
@@ -583,12 +581,9 @@ mod tests {
             .map(|id| round1::round1(id, 2, &identities, thread_rng()).expect("dkg round 1 failed"))
             .collect::<Vec<_>>();
 
-        let round1_secret_package = round1::import_secret_package(&round1_packages[0].0, &secret)
-            .expect("secret package import failed");
-
         let result = super::round2(
-            &identities[0],
-            &round1_secret_package,
+            &secret,
+            &round1_packages[0].0,
             [
                 &round1_packages[0].1,
                 &round1_packages[0].1,
@@ -618,12 +613,9 @@ mod tests {
             .map(|id| round1::round1(id, 2, &identities, thread_rng()).expect("dkg round 1 failed"))
             .collect::<Vec<_>>();
 
-        let round1_secret_package = round1::import_secret_package(&round1_packages[0].0, &secret)
-            .expect("secret package import failed");
-
         let result = super::round2(
-            &identities[0],
-            &round1_secret_package,
+            &secret,
+            &round1_packages[0].0,
             [&round1_packages[0].1, &round1_packages[1].1],
             thread_rng(),
         );
