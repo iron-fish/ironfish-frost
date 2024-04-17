@@ -162,22 +162,16 @@ mod tests {
             round1::round1(&identity2, 2, [&identity1, &identity2], thread_rng())
                 .expect("round 1 failed");
 
-        let round1_secret_package_1 =
-            round1::import_secret_package(&round1_secret_package_1, &secret1)
-                .expect("secret package import failed");
         let (encrypted_secret_package, _) = round2::round2(
-            &identity1,
+            &secret1,
             &round1_secret_package_1,
             [&package1, &package2],
             thread_rng(),
         )
         .expect("round 2 failed");
 
-        let round1_secret_package_2 =
-            round1::import_secret_package(&round1_secret_package_2, &secret2)
-                .expect("secret package import failed");
         let (_, round2_public_packages_2) = round2::round2(
-            &identity2,
+            &secret2,
             &round1_secret_package_2,
             [&package1, &package2],
             thread_rng(),
@@ -217,22 +211,16 @@ mod tests {
             round1::round1(&identity2, 2, [&identity1, &identity2], thread_rng())
                 .expect("round 1 failed");
 
-        let round1_secret_package_1 =
-            round1::import_secret_package(&round1_secret_package_1, &secret1)
-                .expect("secret package import failed");
         let (encrypted_secret_package, _) = round2::round2(
-            &identity1,
+            &secret1,
             &round1_secret_package_1,
             [&package1, &package2],
             thread_rng(),
         )
         .expect("round 2 failed");
 
-        let round1_secret_package_2 =
-            round1::import_secret_package(&round1_secret_package_2, &secret2)
-                .expect("secret package import failed");
         let (_, round2_public_packages_2) = round2::round2(
-            &identity2,
+            &secret2,
             &round1_secret_package_2,
             [&package1, &package2],
             thread_rng(),
@@ -290,33 +278,24 @@ mod tests {
         )
         .expect("round 1 failed");
 
-        let round1_secret_package_1 =
-            round1::import_secret_package(&round1_secret_package_1, &secret1)
-                .expect("secret package import failed");
         let (encrypted_secret_package, _) = round2::round2(
-            &identity1,
+            &secret1,
             &round1_secret_package_1,
             [&package1, &package2, &package3],
             thread_rng(),
         )
         .expect("round 2 failed");
 
-        let round1_secret_package_2 =
-            round1::import_secret_package(&round1_secret_package_2, &secret2)
-                .expect("secret package import failed");
         let (_, round2_public_packages_2) = round2::round2(
-            &identity2,
+            &secret2,
             &round1_secret_package_2,
             [&package1, &package2, &package3],
             thread_rng(),
         )
         .expect("round 2 failed");
 
-        let round1_secret_package_3 =
-            round1::import_secret_package(&round1_secret_package_3, &secret3)
-                .expect("secret package import failed");
         let (_, round2_public_packages_3) = round2::round2(
-            &identity3,
+            &secret3,
             &round1_secret_package_3,
             [&package1, &package2, &package3],
             thread_rng(),
