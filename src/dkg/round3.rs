@@ -11,7 +11,7 @@ use crate::dkg::round2;
 use crate::dkg::round2::import_secret_package;
 use crate::frost::keys::dkg::part3;
 use crate::frost::keys::KeyPackage;
-use crate::frost::keys::PublicKeyPackage;
+use crate::keys::PublicKeyPackage;
 use crate::participant::Secret;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
@@ -60,6 +60,8 @@ where
 
     let mut gsk_shards = Vec::new();
     let mut round1_frost_packages = BTreeMap::new();
+    let mut identities = Vec::new();
+
     for public_package in round1_public_packages.iter() {
         if public_package.checksum() != expected_round1_checksum {
             return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
@@ -83,6 +85,7 @@ where
             .group_secret_key_shard(secret)
             .map_err(Error::DecryptionError)?;
         gsk_shards.push(gsk_shard);
+        identities.push(identity.clone());
     }
 
     // Sanity check
@@ -132,6 +135,9 @@ where
         &round2_frost_packages,
     )
     .map_err(Error::FrostError)?;
+
+    let public_key_package =
+        PublicKeyPackage::from_frost(public_key_package, identities, min_signers);
 
     Ok((
         key_package,
