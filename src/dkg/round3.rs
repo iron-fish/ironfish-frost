@@ -24,13 +24,16 @@ pub fn round3<'a, P, Q>(
 ) -> Result<(KeyPackage, PublicKeyPackage, GroupSecretKey), Error>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
-    Q: IntoIterator<Item = &'a round2::PublicPackage>,
+    Q: IntoIterator<Item = &'a round2::CombinedPublicPackage>,
 {
     let identity = secret.to_identity();
     let round2_secret_package =
         import_secret_package(round2_secret_package, secret).map_err(Error::DecryptionError)?;
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
-    let round2_public_packages = round2_public_packages.into_iter().collect::<Vec<_>>();
+    let round2_public_packages = round2_public_packages
+        .into_iter()
+        .flat_map(|combo| combo.packages_for(&identity))
+        .collect::<Vec<_>>();
 
     let (min_signers, max_signers) = round2::get_secret_package_signers(&round2_secret_package);
 
@@ -76,7 +79,7 @@ where
             .is_some()
         {
             return Err(Error::InvalidInput(format!(
-                "multiple public packages provided for identity {}",
+                "multiple round 1 public packages provided for identity {}",
                 public_package.identity()
             )));
         }
@@ -95,7 +98,9 @@ where
     // inputs
     round1_frost_packages
         .remove(&identity.to_frost_identifier())
-        .expect("missing public package for identity");
+        .ok_or_else(|| {
+            Error::InvalidInput("missing round 1 public package for own identity".to_string())
+        })?;
 
     let expected_round2_checksum =
         round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
@@ -108,7 +113,7 @@ where
 
         if !identity.eq(public_package.recipient_identity()) {
             return Err(Error::InvalidInput(format!(
-                "public package does not have the correct recipient identity {:?}",
+                "round 2 public package does not have the correct recipient identity {:?}",
                 public_package.recipient_identity().serialize()
             )));
         }
@@ -121,7 +126,7 @@ where
             .is_some()
         {
             return Err(Error::InvalidInput(format!(
-                "multiple public packages provided for identity {}",
+                "multiple round 2 public packages provided for identity {}",
                 public_package.sender_identity()
             )));
         }
@@ -176,7 +181,7 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let (_, round2_public_packages_2) = round2::round2(
+        let (_, round2_public_packages) = round2::round2(
             &secret2,
             &round1_secret_package_2,
             [&package1, &package2],
@@ -184,16 +189,11 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let round2_public_packages = [round2_public_packages_2
-            .iter()
-            .find(|p| p.recipient_identity().eq(&identity1))
-            .expect("should have package for identity1")];
-
         let result = round3(
             &secret1,
             &encrypted_secret_package,
             [&package2],
-            round2_public_packages,
+            [&round2_public_packages],
         );
 
         match result {
@@ -225,7 +225,7 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let (_, round2_public_packages_2) = round2::round2(
+        let (_, round2_public_packages) = round2::round2(
             &secret2,
             &round1_secret_package_2,
             [&package1, &package2],
@@ -233,16 +233,11 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let round2_public_packages = [round2_public_packages_2
-            .iter()
-            .find(|p| p.recipient_identity().eq(&identity1))
-            .expect("should have package for identity1")];
-
         let result = round3(
             &secret1,
             &encrypted_secret_package,
             [&package1, &package1],
-            round2_public_packages,
+            [&round2_public_packages],
         );
 
         match result {
@@ -308,22 +303,11 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let round2_public_packages = [
-            round2_public_packages_2
-                .iter()
-                .find(|p| p.recipient_identity().eq(&identity1))
-                .expect("should have package for identity1"),
-            round2_public_packages_3
-                .iter()
-                .find(|p| p.recipient_identity().eq(&identity1))
-                .expect("should have package for identity1"),
-        ];
-
         round3(
             &secret1,
             &encrypted_secret_package,
             [&package1, &package2, &package3],
-            round2_public_packages,
+            [&round2_public_packages_2, &round2_public_packages_3],
         )
         .expect("round 3 failed");
     }

@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::checksum::Checksum;
-
 use crate::checksum::ChecksumError;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
@@ -30,7 +29,6 @@ use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use std::borrow::Borrow;
-
 use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::io;
@@ -229,15 +227,25 @@ impl PublicPackage {
 
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         self.sender_identity.serialize_into(&mut writer)?;
+        self.serialize_without_sender_into(writer)
+    }
+
+    fn serialize_without_sender_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         self.recipient_identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.checksum.to_le_bytes())?;
-        Ok(())
+        writer.write_all(&self.checksum.to_le_bytes())
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let sender_identity = Identity::deserialize_from(&mut reader)?;
+        Self::deserialize_without_sender_from(reader, sender_identity)
+    }
+
+    fn deserialize_without_sender_from<R: io::Read>(
+        mut reader: R,
+        sender_identity: Identity,
+    ) -> io::Result<Self> {
         let recipient_identity = Identity::deserialize_from(&mut reader)?;
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
@@ -256,12 +264,85 @@ impl PublicPackage {
     }
 }
 
+/// A collection of [`PublicPackage`] structs, all from the same sender.
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
+pub struct CombinedPublicPackage {
+    packages: Vec<PublicPackage>,
+}
+
+impl CombinedPublicPackage {
+    // This struct should not be constructed directly, hence `new` does not need to be `pub`.
+    // Keeping `new` private has the advantage that the implementation does not need to strictly
+    // enforce the same `sender_identity`, but it can omit this check (here we still check in debug
+    // builds just to catch bugs).
+    fn new(packages: Vec<PublicPackage>) -> Self {
+        // The serialization expects at least 1 package to be present
+        debug_assert!(!packages.is_empty());
+
+        let first_identity = &packages[0].sender_identity;
+        for pkg in &packages {
+            debug_assert_eq!(&pkg.sender_identity, first_identity);
+        }
+
+        Self { packages }
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn packages(&self) -> &[PublicPackage] {
+        &self.packages
+    }
+
+    #[inline]
+    pub fn packages_for<'a>(
+        &'a self,
+        recipient_identity: &'a Identity,
+    ) -> impl Iterator<Item = &'a PublicPackage> + 'a {
+        self.packages
+            .iter()
+            .filter(move |pkg| &pkg.recipient_identity == recipient_identity)
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        self.serialize_into(&mut buf).expect("serialization failed");
+        buf
+    }
+
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+        let sender_identity = &self.packages[0].sender_identity;
+        sender_identity.serialize_into(&mut writer)?;
+        write_variable_length(writer, &self.packages, |writer, pkg| {
+            pkg.serialize_without_sender_into(writer)
+        })
+    }
+
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        let sender_identity = Identity::deserialize_from(&mut reader)?;
+
+        let packages = read_variable_length(reader, move |reader| {
+            PublicPackage::deserialize_without_sender_from(reader, sender_identity.clone())
+        })?;
+
+        Ok(Self { packages })
+    }
+}
+
+impl IntoIterator for CombinedPublicPackage {
+    type Item = PublicPackage;
+    type IntoIter = <Vec<PublicPackage> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.packages.into_iter()
+    }
+}
+
 pub fn round2<'a, P, R>(
     secret: &participant::Secret,
     round1_secret_package: &[u8],
     round1_public_packages: P,
     mut csrng: R,
-) -> Result<(Vec<u8>, Vec<PublicPackage>), Error>
+) -> Result<(Vec<u8>, CombinedPublicPackage), Error>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
@@ -354,7 +435,10 @@ where
         round2_public_packages.push(public_package);
     }
 
-    Ok((encrypted_secret_package, round2_public_packages))
+    Ok((
+        encrypted_secret_package,
+        CombinedPublicPackage::new(round2_public_packages),
+    ))
 }
 
 #[cfg(test)]
@@ -558,12 +642,12 @@ mod tests {
             .expect("round 2 secret package import failed");
 
         round2_public_packages
-            .iter()
-            .find(|&p| p.recipient_identity() == &identity2)
+            .packages_for(&identity2)
+            .next()
             .expect("round 2 public packages missing package for identity2");
         round2_public_packages
-            .iter()
-            .find(|&p| p.recipient_identity() == &identity3)
+            .packages_for(&identity3)
+            .next()
             .expect("round 2 public packages missing package for identity3");
     }
 
