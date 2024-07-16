@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::multienc;
-use crate::multienc::MultiRecipientBlob;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use rand_core::CryptoRng;
@@ -70,16 +69,16 @@ impl GroupSecretKeyShard {
         Ok(Self { shard })
     }
 
-    pub fn export<'a, I, R>(&self, recipients: I, csrng: R) -> io::Result<Vec<u8>>
+    pub fn export<'a, I, R>(&self, recipients: I, csrng: R) -> Vec<u8>
     where
         I: IntoIterator<Item = &'a Identity>,
+        I::IntoIter: ExactSizeIterator,
         R: RngCore + CryptoRng,
     {
-        multienc::encrypt(&self.shard, recipients, csrng).serialize()
+        multienc::encrypt(&self.shard, recipients, csrng)
     }
 
     pub fn import(secret: &Secret, exported: &[u8]) -> io::Result<Self> {
-        let exported = MultiRecipientBlob::deserialize_from(exported)?;
         let bytes = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
 
         if bytes.len() != GROUP_SECRET_KEY_LEN {
@@ -184,9 +183,7 @@ mod tests {
         let shard = GroupSecretKeyShard::random(thread_rng());
 
         // Encrypt the shard with all the identities at once
-        let exported = shard
-            .export(&identities, thread_rng())
-            .expect("export failed");
+        let exported = shard.export(&identities, thread_rng());
 
         // Ensure that the exported blob does not contain the shard in cleartext
         let shard_cleartext = shard.serialize();

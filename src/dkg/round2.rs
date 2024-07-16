@@ -17,7 +17,6 @@ use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
 use crate::multienc;
-use crate::multienc::MultiRecipientBlob;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;
@@ -142,16 +141,18 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
     if serializable.identifier != identity.to_frost_identifier() {
         return Err(io::Error::other("identity mismatch"));
     }
+
     let mut serialized = Vec::new();
-    serializable.serialize_into(&mut serialized)?;
-    multienc::encrypt(&serialized, [identity], csrng).serialize()
+    serializable
+        .serialize_into(&mut serialized)
+        .expect("serialization failed");
+    Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
 
 pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> io::Result<SecretPackage> {
-    let exported = MultiRecipientBlob::deserialize_from(exported)?;
     let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }

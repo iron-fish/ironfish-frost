@@ -3,18 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::frost;
+use crate::io;
+use core::cell::OnceCell;
+use core::cmp;
+use core::hash::Hash;
+use core::hash::Hasher;
 use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
 use ed25519_dalek::VerifyingKey;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::cell::OnceCell;
-use std::cmp;
-use std::fmt;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::io;
 use x25519_dalek::PublicKey;
 use x25519_dalek::StaticSecret;
 
@@ -306,8 +305,8 @@ impl<'a> From<&'a Identity> for frost::Identifier {
     }
 }
 
-impl fmt::Display for Identity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for Identity {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for byte in self.serialize() {
             write!(f, "{:02x}", byte)?;
         }

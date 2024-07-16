@@ -4,9 +4,10 @@
 
 //! Internal module to help with serialization and deserialization.
 
-use std::io;
+use crate::io;
 
 #[inline]
+#[cfg(feature = "dkg")]
 pub(crate) fn write_u16<W: io::Write>(mut writer: W, value: u16) -> io::Result<()> {
     writer.write_all(&value.to_le_bytes())
 }
@@ -25,6 +26,7 @@ pub(crate) fn write_usize<W: io::Write>(writer: W, value: usize) -> io::Result<(
 }
 
 #[inline]
+#[cfg(feature = "dkg")]
 pub(crate) fn write_variable_length<W, I, F>(mut writer: W, iter: I, f: F) -> io::Result<()>
 where
     W: io::Write,
@@ -41,6 +43,7 @@ where
 }
 
 #[inline]
+#[cfg(feature = "dkg")]
 pub(crate) fn write_variable_length_bytes<W: io::Write>(
     mut writer: W,
     bytes: &[u8],
@@ -50,6 +53,7 @@ pub(crate) fn write_variable_length_bytes<W: io::Write>(
 }
 
 #[inline]
+#[cfg(feature = "dkg")]
 pub(crate) fn read_u16<R: io::Read>(mut reader: R) -> io::Result<u16> {
     let mut value = [0u8; 2];
     reader.read_exact(&mut value)?;
@@ -69,6 +73,7 @@ pub(crate) fn read_usize<R: io::Read>(reader: R) -> io::Result<usize> {
 }
 
 #[inline]
+#[cfg(feature = "dkg")]
 pub(crate) fn read_variable_length<R, F, T>(mut reader: R, f: F) -> io::Result<Vec<T>>
 where
     R: io::Read,
@@ -83,6 +88,7 @@ where
 }
 
 #[inline]
+#[cfg(feature = "dkg")]
 pub(crate) fn read_variable_length_bytes<R: io::Read>(mut reader: R) -> io::Result<Vec<u8>> {
     let len = read_usize(&mut reader)?;
     let mut bytes = vec![0u8; len];
@@ -93,9 +99,9 @@ pub(crate) fn read_variable_length_bytes<R: io::Read>(mut reader: R) -> io::Resu
 #[cfg(test)]
 mod test {
     use super::*;
+    use core::mem;
     use rand::thread_rng;
     use rand::Rng;
-    use std::mem;
 
     macro_rules! test_serde {
         ( $value:expr, $write:expr, $read:expr, size = $size:expr ) => {
@@ -137,6 +143,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "dkg")]
     fn write_read_u16() {
         test_int!(u16, write_u16, read_u16, size = 2);
     }
@@ -160,6 +167,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "dkg")]
     fn write_read_variable_length() {
         test_serde!(
             Vec::<u16>::new(),
@@ -181,6 +189,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "dkg")]
     fn write_read_variable_length_bytes() {
         test_serde!(
             &b""[..],

@@ -7,7 +7,6 @@ use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
 use crate::dkg::error::Error;
 use crate::dkg::group_key::GroupSecretKeyShard;
-use crate::dkg::group_key::GroupSecretKeyShardSerialization;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package;
 use crate::frost::keys::dkg::round1::SecretPackage;
@@ -16,7 +15,7 @@ use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
 use crate::multienc;
-use crate::multienc::MultiRecipientBlob;
+use crate::multienc::read_encrypted_blob;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;
@@ -143,16 +142,18 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
     if serializable.identifier != identity.to_frost_identifier() {
         return Err(io::Error::other("identity mismatch"));
     }
+
     let mut serialized = Vec::new();
-    serializable.serialize_into(&mut serialized)?;
-    multienc::encrypt(&serialized, [identity], csrng).serialize()
+    serializable
+        .serialize_into(&mut serialized)
+        .expect("serialization failed");
+    Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
 
 pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> io::Result<SecretPackage> {
-    let exported = MultiRecipientBlob::deserialize_from(exported)?;
     let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
@@ -182,8 +183,7 @@ where
 pub struct PublicPackage {
     identity: Identity,
     frost_package: Package,
-    group_secret_key_shard_encrypted:
-        MultiRecipientBlob<Vec<GroupSecretKeyShardSerialization>, Vec<u8>>,
+    group_secret_key_shard_encrypted: Vec<u8>,
     checksum: Checksum,
 }
 
@@ -224,9 +224,7 @@ impl PublicPackage {
         &self.frost_package
     }
 
-    pub fn group_secret_key_shard_encrypted(
-        &self,
-    ) -> &MultiRecipientBlob<Vec<GroupSecretKeyShardSerialization>, Vec<u8>> {
+    pub fn group_secret_key_shard_encrypted(&self) -> &[u8] {
         &self.group_secret_key_shard_encrypted
     }
 
@@ -253,8 +251,7 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        self.group_secret_key_shard_encrypted
-            .serialize_into(&mut writer)?;
+        writer.write_all(&self.group_secret_key_shard_encrypted[..])?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -265,7 +262,7 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
 
-        let group_secret_key_shard_encrypted = MultiRecipientBlob::deserialize_from(&mut reader)?;
+        let group_secret_key_shard_encrypted = read_encrypted_blob(&mut reader)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;

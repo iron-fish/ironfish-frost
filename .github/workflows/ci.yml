@@ -20,18 +20,18 @@ jobs:
           save-if: false
           shared-key: base
 
-      - name: Install Cargo tools
+      - name: Install rustfmt and clippy
         run: |
           rustup component add rustfmt clippy
 
       - name: Check for license headers
         run: ./ci/lintHeaders.sh
 
-      - name: "`cargo fmt` check"
+      - name: cargo fmt
         run: |
           cargo fmt --all -- --check
 
-      - name: "Clippy check on"
+      - name: cargo clippy
         run: |
           cargo clippy --all-targets -- -D warnings
 
@@ -47,10 +47,14 @@ jobs:
           save-if: false
           shared-key: base
 
+      - name: Install cargo-all-features
+        run: |
+          cargo install --locked cargo-all-features
+
       - name: Run tests (debug mode)
         run: |
-          cargo test
+          cargo test-all-features
 
       - name: Run tests (release mode)
         run: |
-          cargo test --release
+          cargo test-all-features --release
