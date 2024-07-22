@@ -11,7 +11,6 @@
 
 mod serde;
 
-#[cfg(feature = "signing")]
 mod checksum;
 
 pub mod multienc;
@@ -37,6 +36,11 @@ mod io {
     pub(crate) use std::io::Result;
     pub(crate) use std::io::Write;
 }
+
+#[cfg(not(feature = "std"))]
+#[macro_use]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 mod io {
@@ -72,6 +76,13 @@ mod io {
             } else {
                 Err(Error)
             }
+        }
+
+        fn by_ref(&mut self) -> &mut Self
+        where
+            Self: Sized,
+        {
+            self
         }
     }
 

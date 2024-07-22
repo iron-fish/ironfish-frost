@@ -21,9 +21,24 @@ use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
 use reddsa::frost::redjubjub::VerifyingKey;
-use std::borrow::Borrow;
+use core::borrow::Borrow;
+use crate::io;
+
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::io;
+
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+
+
+
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyPackage {
@@ -72,7 +87,6 @@ impl PublicKeyPackage {
         bytes
     }
 
-    #[cfg(feature = "std")]
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         let frost_public_key_package = self
             .frost_public_key_package
@@ -87,7 +101,6 @@ impl PublicKeyPackage {
         Ok(())
     }
 
-    #[cfg(feature = "std")]
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let frost_public_key_package = read_variable_length_bytes(&mut reader)?;
         let frost_public_key_package =

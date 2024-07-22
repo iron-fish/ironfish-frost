@@ -27,11 +27,23 @@ use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::borrow::Borrow;
+use core::borrow::Borrow;
+use crate::io;
+use core::mem;
+use core::hash::Hasher;
+
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::hash::Hasher;
-use std::io;
-use std::mem;
+
+
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
+
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -144,7 +156,7 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
 
     let mut serialized = Vec::new();
     serializable
-        .serialize_into(&mut serialized)
+        .serialize_into(&mut serialized[..])
         .expect("serialization failed");
     Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
@@ -222,7 +234,7 @@ impl PublicPackage {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.serialize_into(&mut buf).expect("serialization failed");
+        self.serialize_into(&mut buf[..]).expect("serialization failed");
         buf
     }
 
@@ -306,7 +318,7 @@ impl CombinedPublicPackage {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.serialize_into(&mut buf).expect("serialization failed");
+        self.serialize_into(&mut buf[..]).expect("serialization failed");
         buf
     }
 
@@ -512,7 +524,7 @@ mod tests {
 
         let mut serialized = Vec::new();
         SerializableSecretPackage::from(secret_pkg.clone())
-            .serialize_into(&mut serialized)
+            .serialize_into(&mut serialized[..])
             .expect("serialization failed");
 
         let deserialized: SecretPackage =

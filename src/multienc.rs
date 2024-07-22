@@ -24,6 +24,8 @@ use x25519_dalek::ReusableSecret;
 extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use crate::alloc::borrow::ToOwned;
 
 pub const HEADER_SIZE: usize = 56;
 pub const KEY_SIZE: usize = 32;
@@ -34,25 +36,25 @@ pub const fn metadata_size(num_recipients: usize) -> usize {
     HEADER_SIZE + KEY_SIZE * num_recipients
 }
 
-pub fn read_encrypted_blob<R>(mut reader: R) -> io::Result<Vec<u8>>
+pub fn read_encrypted_blob<R>(reader: &mut R) -> Result<Vec<u8>, io::Error>
 where
-    R: io::Read,
+    R: crate::io::Read,
 {
-    #[cfg(feature = "std")]
-    use std::io::Read;
-
     let mut result = Vec::new();
-    let reader = reader.by_ref();
 
-    reader.take(HEADER_SIZE as u64).read_to_end(&mut result)?;
+    let mut header_bytes = [0u8; HEADER_SIZE];
+    reader.read(&mut header_bytes)?;
+    let header: Header = Header::deserialize_from(&header_bytes[..])?;
 
-    let header = Header::deserialize_from(&result[..])?;
     for _ in 0..header.num_recipients {
-        reader.take(KEY_SIZE as u64).read_to_end(&mut result)?;
+        let mut key_bytes = vec![0u8; KEY_SIZE];
+        reader.read(&mut key_bytes)?;
+        result.extend(key_bytes);
     }
-    reader
-        .take(header.data_len as u64)
-        .read_to_end(&mut result)?;
+
+    let mut data_bytes = vec![0u8; header.data_len as usize];
+    reader.read(&mut data_bytes)?;
+    result.extend(data_bytes);
 
     Ok(result)
 }
@@ -157,7 +159,7 @@ pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
         }
         #[cfg(not(feature = "std"))]
         {
-            return Err(io::Error());
+            return Err(io::Error);
         }
     }
 
@@ -251,7 +253,6 @@ impl Header {
         write_usize(&mut writer, self.data_len)
     }
 
-    #[cfg(feature = "std")]
     fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let mut agreement_key = [0u8; 32];
         reader.read_exact(&mut agreement_key)?;

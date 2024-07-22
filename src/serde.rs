@@ -6,6 +6,12 @@
 
 use crate::io;
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
+
 #[inline]
 #[cfg(feature = "dkg")]
 pub(crate) fn write_u16<W: io::Write>(mut writer: W, value: u16) -> io::Result<()> {
@@ -91,7 +97,7 @@ where
 #[cfg(feature = "dkg")]
 pub(crate) fn read_variable_length_bytes<R: io::Read>(mut reader: R) -> io::Result<Vec<u8>> {
     let len = read_usize(&mut reader)?;
-    let mut bytes = vec![0u8; len];
+    let mut bytes = Vec::with_capacity(len);
     reader.read_exact(&mut bytes)?;
     Ok(bytes)
 }

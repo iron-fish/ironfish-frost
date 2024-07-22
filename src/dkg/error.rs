@@ -4,8 +4,17 @@
 
 use crate::checksum::ChecksumError;
 use crate::frost;
-use std::fmt;
-use std::io;
+use core::fmt;
+use core::fmt::Debug;
+use crate::io;
+
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
+
 
 #[derive(Debug)]
 pub enum Error {
@@ -21,26 +30,27 @@ impl fmt::Display for Error {
         match self {
             Self::InvalidInput(e) => {
                 write!(f, "invalid input: ")?;
-                e.fmt(f)
+                Debug::fmt(&e, f)
             }
             Self::FrostError(e) => {
                 write!(f, "frost error: ")?;
-                e.fmt(f)
+                Debug::fmt(&e, f)
             }
             Self::EncryptionError(e) => {
                 write!(f, "encryption error: ")?;
-                e.fmt(f)
+                Debug::fmt(&e, f)
             }
             Self::DecryptionError(e) => {
                 write!(f, "decryption error: ")?;
-                e.fmt(f)
+                Debug::fmt(&e, f)
             }
             Self::ChecksumError(e) => {
                 write!(f, "checksum error: ")?;
-                e.fmt(f)
+                Debug::fmt(&e, f)
             }
         }
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for Error {}

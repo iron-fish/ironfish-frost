@@ -7,7 +7,13 @@ use crate::participant::Identity;
 use crate::participant::Secret;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::io;
+use crate::io;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 
 pub const GROUP_SECRET_KEY_LEN: usize = 32;
 
