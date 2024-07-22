@@ -63,8 +63,8 @@ where
     let recipients = recipients.into_iter();
     let metadata_len = metadata_size(recipients.len());
     let mut result = vec![0u8; metadata_len + data.len()];
-    let (metadata, ciphertext) = result.split_at_mut(metadata_len);
 
+    let (metadata, ciphertext) = result.split_at_mut(metadata_len);
     ciphertext.copy_from_slice(data);
     encrypt_in_place(ciphertext, metadata, recipients, csrng).expect("failed to encrypt data");
 

@@ -6,8 +6,8 @@ use crate::checksum::Checksum;
 use crate::checksum::ChecksumError;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
-use crate::dkg::error::Error;
 use crate::dkg::round1;
+use crate::error::IronfishFrostError;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package as Round1Package;
 use crate::frost::keys::dkg::round2::Package;
@@ -82,9 +82,10 @@ impl<'a> From<&'a SerializableSecretPackage> for &'a SecretPackage {
 }
 
 impl SerializableSecretPackage {
-    fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         writer.write_all(&self.identifier.serialize())?;
-        write_variable_length(&mut writer, self.commitment.serialize(), |writer, array| {
+        let serialized = self.commitment.serialize()?;
+        write_variable_length(&mut writer, serialized, |writer, array| {
             writer.write_all(&array)
         })?;
         writer.write_all(&self.secret_share.to_bytes())?;
@@ -93,10 +94,10 @@ impl SerializableSecretPackage {
         Ok(())
     }
 
-    fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let mut identifier = [0u8; 32];
         reader.read_exact(&mut identifier)?;
-        let identifier = Identifier::deserialize(&identifier).map_err(io::Error::other)?;
+        let identifier = Identifier::deserialize(&identifier)?;
 
         let commitment = VerifiableSecretSharingCommitment::deserialize(read_variable_length(
             &mut reader,
@@ -105,8 +106,7 @@ impl SerializableSecretPackage {
                 reader.read_exact(&mut array)?;
                 Ok(array)
             },
-        )?)
-        .map_err(io::Error::other)?;
+        )?)?;
 
         let mut scalar = [0u8; 32];
         reader.read_exact(&mut scalar)?;
@@ -152,8 +152,8 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
 pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
-) -> io::Result<SecretPackage> {
-    let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+) -> Result<SecretPackage, IronfishFrostError> {
+    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
@@ -226,19 +226,22 @@ impl PublicPackage {
         buf
     }
 
-    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         self.sender_identity.serialize_into(&mut writer)?;
         self.serialize_without_sender_into(writer)
     }
 
-    fn serialize_without_sender_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    fn serialize_without_sender_into<W: io::Write>(
+        &self,
+        mut writer: W,
+    ) -> Result<(), IronfishFrostError> {
         self.recipient_identity.serialize_into(&mut writer)?;
-        let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
+        let frost_package = self.frost_package.serialize()?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.checksum.to_le_bytes())
+        Ok(writer.write_all(&self.checksum.to_le_bytes())?)
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let sender_identity = Identity::deserialize_from(&mut reader)?;
         Self::deserialize_without_sender_from(reader, sender_identity)
     }
@@ -246,11 +249,11 @@ impl PublicPackage {
     fn deserialize_without_sender_from<R: io::Read>(
         mut reader: R,
         sender_identity: Identity,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, IronfishFrostError> {
         let recipient_identity = Identity::deserialize_from(&mut reader)?;
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
-        let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
+        let frost_package = Package::deserialize(&frost_package)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -310,19 +313,25 @@ impl CombinedPublicPackage {
         buf
     }
 
-    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         let sender_identity = &self.packages[0].sender_identity;
         sender_identity.serialize_into(&mut writer)?;
-        write_variable_length(writer, &self.packages, |writer, pkg| {
-            pkg.serialize_without_sender_into(writer)
-        })
+        Ok(write_variable_length(
+            writer,
+            &self.packages,
+            |writer, pkg| {
+                pkg.serialize_without_sender_into(writer)
+                    .map_err(|_| io::Error::other("serialize_into failed"))
+            },
+        )?)
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let sender_identity = Identity::deserialize_from(&mut reader)?;
 
         let packages = read_variable_length(reader, move |reader| {
             PublicPackage::deserialize_without_sender_from(reader, sender_identity.clone())
+                .map_err(|_| io::Error::other("deserialization failed"))
         })?;
 
         Ok(Self { packages })
@@ -343,14 +352,13 @@ pub fn round2<'a, P, R>(
     round1_secret_package: &[u8],
     round1_public_packages: P,
     mut csrng: R,
-) -> Result<(Vec<u8>, CombinedPublicPackage), Error>
+) -> Result<(Vec<u8>, CombinedPublicPackage), IronfishFrostError>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
 {
     let self_identity = secret.to_identity();
-    let round1_secret_package = round1::import_secret_package(round1_secret_package, secret)
-        .map_err(Error::DecryptionError)?;
+    let round1_secret_package = round1::import_secret_package(round1_secret_package, secret)?;
 
     // Extract the min/max signers from the secret package
     let (min_signers, max_signers) = round1::get_secret_package_signers(&round1_secret_package);
@@ -359,11 +367,7 @@ where
 
     // Ensure that the number of public packages provided matches max_signers
     if round1_public_packages.len() != max_signers as usize {
-        return Err(Error::InvalidInput(format!(
-            "expected {} public packages, got {}",
-            max_signers,
-            round1_public_packages.len()
-        )));
+        return Err(IronfishFrostError::InvalidInput);
     }
 
     let expected_round1_checksum = round1::input_checksum(
@@ -375,7 +379,9 @@ where
     let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
     for public_package in round1_public_packages.clone() {
         if public_package.checksum() != expected_round1_checksum {
-            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
+            return Err(IronfishFrostError::ChecksumError(
+                ChecksumError::DkgPublicPackageError,
+            ));
         }
 
         let identity = public_package.identity();
@@ -386,10 +392,7 @@ where
             .insert(frost_identifier, frost_package)
             .is_some()
         {
-            return Err(Error::InvalidInput(format!(
-                "multiple public packages provided for identity {}",
-                public_package.identity()
-            )));
+            return Err(IronfishFrostError::InvalidInput);
         }
 
         identities.insert(frost_identifier, identity);
@@ -411,13 +414,11 @@ where
 
     // Run the FROST DKG round 2
     let (round2_secret_package, round2_packages) =
-        frost::keys::dkg::part2(round1_secret_package.clone(), &round1_frost_packages)
-            .map_err(Error::FrostError)?;
+        frost::keys::dkg::part2(round1_secret_package.clone(), &round1_frost_packages)?;
 
     // Encrypt the secret package
     let encrypted_secret_package =
-        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)
-            .map_err(Error::EncryptionError)?;
+        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
 
     // Convert the Identifier->Package map to an Identity->PublicPackage map
     let mut round2_public_packages = Vec::new();
@@ -679,7 +680,7 @@ mod tests {
         );
 
         match result {
-            Err(Error::InvalidInput(_)) => (),
+            Err(IronfishFrostError::InvalidInput) => (),
             _ => panic!("dkg round2 should have failed with InvalidInput"),
         }
     }
@@ -707,7 +708,7 @@ mod tests {
 
         // We can use `assert_matches` once it's stabilized
         match result {
-            Err(Error::InvalidInput(_)) => (),
+            Err(IronfishFrostError::InvalidInput) => (),
             _ => panic!("dkg round2 should have failed with InvalidInput"),
         }
     }

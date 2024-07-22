@@ -14,6 +14,7 @@ mod serde;
 #[cfg(feature = "signing")]
 mod checksum;
 
+pub mod error;
 pub mod multienc;
 pub mod participant;
 

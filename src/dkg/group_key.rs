@@ -79,7 +79,7 @@ impl GroupSecretKeyShard {
     }
 
     pub fn import(secret: &Secret, exported: &[u8]) -> io::Result<Self> {
-        let bytes = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+        let bytes = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
 
         if bytes.len() != GROUP_SECRET_KEY_LEN {
             return Err(io::Error::other(
