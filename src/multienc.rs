@@ -20,6 +20,11 @@ use rand_core::RngCore;
 use x25519_dalek::PublicKey;
 use x25519_dalek::ReusableSecret;
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 pub const HEADER_SIZE: usize = 56;
 pub const KEY_SIZE: usize = 32;
 
@@ -29,11 +34,11 @@ pub const fn metadata_size(num_recipients: usize) -> usize {
     HEADER_SIZE + KEY_SIZE * num_recipients
 }
 
-#[cfg(feature = "std")]
 pub fn read_encrypted_blob<R>(mut reader: R) -> io::Result<Vec<u8>>
 where
     R: io::Read,
 {
+    #[cfg(feature = "std")]
     use std::io::Read;
 
     let mut result = Vec::new();
@@ -53,7 +58,6 @@ where
 }
 
 #[must_use]
-#[cfg(feature = "std")]
 pub fn encrypt<'a, I, R>(data: &[u8], recipients: I, csrng: R) -> Vec<u8>
 where
     I: IntoIterator<Item = &'a Identity>,
@@ -62,7 +66,7 @@ where
 {
     let recipients = recipients.into_iter();
     let metadata_len = metadata_size(recipients.len());
-    let mut result = vec![0u8; metadata_len + data.len()];
+    let mut result = Vec::with_capacity(metadata_len + data.len());
     let (metadata, ciphertext) = result.split_at_mut(metadata_len);
 
     ciphertext.copy_from_slice(data);
@@ -140,7 +144,6 @@ where
 ///
 /// This method expects the ciphertext and the metadata to be concatenated in one slice. Use
 /// [`decrypt_in_place`] if you have two separate slices.
-#[cfg(feature = "std")]
 pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
     let header = Header::deserialize_from(data)?;
     let metadata_len = metadata_size(header.num_recipients);
@@ -148,7 +151,14 @@ pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
         .checked_add(header.data_len)
         .ok_or_else(|| io::Error::other("overflow when calculating data size"))?;
     if data.len() < total_len {
-        return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+        #[cfg(feature = "std")]
+        {
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            return Err(io::Error());
+        }
     }
 
     let (metadata, ciphertext) = data.split_at(metadata_len);
@@ -265,7 +275,6 @@ impl Header {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "std")]
     mod detached {
         use crate::multienc::decrypt;
         use crate::multienc::encrypt;
