@@ -7,7 +7,6 @@ use reddsa::frost::redjubjub::JubjubBlake2b512;
 
 use crate::io;
 
-#[cfg(feature = "signing")]
 use crate::checksum::ChecksumError;
 
 #[derive(Debug)]
@@ -17,7 +16,6 @@ pub enum IronfishFrostError {
     IoError(io::Error),
     FrostError(FrostError<JubjubBlake2b512>),
     SignatureError(ed25519_dalek::SignatureError),
-    #[cfg(feature = "signing")]
     ChecksumError(ChecksumError),
 }
 

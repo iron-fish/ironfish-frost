@@ -12,6 +12,7 @@ use crate::error::IronfishFrostError;
 use crate::frost::keys::dkg::part3;
 use crate::frost::keys::KeyPackage;
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
+use crate::io;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use crate::serde::read_u16;
@@ -20,10 +21,18 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
 use reddsa::frost::redjubjub::VerifyingKey;
-use std::borrow::Borrow;
+
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::io;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyPackage {
@@ -72,9 +81,11 @@ impl PublicKeyPackage {
         bytes
     }
 
-    #[cfg(feature = "std")]
-    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
-        let frost_public_key_package = self.frost_public_key_package.serialize()?;
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+        let frost_public_key_package = self
+            .frost_public_key_package
+            .serialize()
+            .map_err(|_| io::Error::other("public key package serialization failed"))?;
         write_variable_length_bytes(&mut writer, &frost_public_key_package)?;
         write_variable_length(&mut writer, &self.identities, |writer, identity| {
             identity.serialize_into(writer)
@@ -84,7 +95,6 @@ impl PublicKeyPackage {
         Ok(())
     }
 
-    #[cfg(feature = "std")]
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let frost_public_key_package = read_variable_length_bytes(&mut reader)?;
         let frost_public_key_package =
@@ -171,7 +181,7 @@ where
     // inputs
     round1_frost_packages
         .remove(&identity.to_frost_identifier())
-        .ok_or_else(|| IronfishFrostError::InvalidInput)?;
+        .ok_or(IronfishFrostError::InvalidInput)?;
 
     let expected_round2_checksum =
         round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
