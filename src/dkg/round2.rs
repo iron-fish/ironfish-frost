@@ -16,6 +16,7 @@ use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
+use crate::io;
 use crate::multienc;
 use crate::participant;
 use crate::participant::Identity;
@@ -25,27 +26,22 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
+use core::hash::Hasher;
+use core::mem;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use core::borrow::Borrow;
-use crate::io;
-use core::mem;
-use core::hash::Hasher;
-use log::info;
-
+// use log::info;
 
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-
-
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
-
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -167,7 +163,7 @@ pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> io::Result<SecretPackage> {
-    let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
@@ -237,7 +233,6 @@ impl PublicPackage {
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         self.serialize_into(&mut buf).expect("serialization failed");
-        info!("buf: {:?}", buf);
         buf
     }
 

@@ -164,7 +164,7 @@ pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> io::Result<SecretPackage> {
-    let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 

@@ -52,7 +52,7 @@ where
         result.extend(key_bytes);
     }
 
-    let mut data_bytes = vec![0u8; header.data_len as usize];
+    let mut data_bytes = vec![0u8; header.data_len];
     reader.read(&mut data_bytes)?;
     result.extend(data_bytes);
 
