@@ -167,7 +167,7 @@ impl SigningCommitment {
 
     pub fn serialize(&self) -> [u8; SIGNING_COMMITMENT_LEN] {
         let mut bytes = [0u8; SIGNING_COMMITMENT_LEN];
-        self.serialize_into(&mut bytes[..])
+        self.serialize_into(&mut bytes)
             .expect("serialization failed");
         bytes
     }

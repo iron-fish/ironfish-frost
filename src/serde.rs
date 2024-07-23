@@ -97,7 +97,7 @@ where
 #[cfg(feature = "dkg")]
 pub(crate) fn read_variable_length_bytes<R: io::Read>(mut reader: R) -> io::Result<Vec<u8>> {
     let len = read_usize(&mut reader)?;
-    let mut bytes = Vec::with_capacity(len);
+    let mut bytes = vec![0u8; len];
     reader.read_exact(&mut bytes)?;
     Ok(bytes)
 }

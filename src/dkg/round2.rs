@@ -31,6 +31,8 @@ use core::borrow::Borrow;
 use crate::io;
 use core::mem;
 use core::hash::Hasher;
+use log::info;
+
 
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
@@ -156,7 +158,7 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
 
     let mut serialized = Vec::new();
     serializable
-        .serialize_into(&mut serialized[..])
+        .serialize_into(&mut serialized)
         .expect("serialization failed");
     Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
@@ -234,7 +236,8 @@ impl PublicPackage {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.serialize_into(&mut buf[..]).expect("serialization failed");
+        self.serialize_into(&mut buf).expect("serialization failed");
+        info!("buf: {:?}", buf);
         buf
     }
 
@@ -318,7 +321,7 @@ impl CombinedPublicPackage {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.serialize_into(&mut buf[..]).expect("serialization failed");
+        self.serialize_into(&mut buf).expect("serialization failed");
         buf
     }
 
@@ -524,7 +527,7 @@ mod tests {
 
         let mut serialized = Vec::new();
         SerializableSecretPackage::from(secret_pkg.clone())
-            .serialize_into(&mut serialized[..])
+            .serialize_into(&mut serialized)
             .expect("serialization failed");
 
         let deserialized: SecretPackage =

@@ -21,7 +21,6 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
-use alloc::borrow::ToOwned;
 use core::borrow::Borrow;
 use reddsa::frost::redjubjub::VerifyingKey;
 
@@ -65,17 +64,6 @@ impl PublicKeyPackage {
         &self.identities[..]
     }
 
-    pub fn get_size(&self) -> Result<usize, io::Error> {
-        let pkp = self
-            .frost_public_key_package
-            .serialize()
-            .map_err(io::Error::other)?;
-        let identities = (self.identities()[0].serialize().len() + 2) * self.identities.len();
-        // 2 bytes for length
-        let min_signers = 2;
-        Ok(pkp.len() + identities + min_signers)
-    }
-
     pub fn verifying_key(&self) -> &VerifyingKey {
         self.frost_public_key_package.verifying_key()
     }
@@ -89,9 +77,8 @@ impl PublicKeyPackage {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        let size = self.get_size().expect("serialization failed");
-        let mut bytes = Vec::with_capacity(size);
-        self.serialize_into(&mut bytes.as_mut_slice())
+        let mut bytes = Vec::new();
+        self.serialize_into(&mut bytes)
             .expect("serialization failed");
         bytes
     }
