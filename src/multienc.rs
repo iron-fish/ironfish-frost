@@ -23,9 +23,9 @@ use x25519_dalek::ReusableSecret;
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 use crate::alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 pub const HEADER_SIZE: usize = 56;
 pub const KEY_SIZE: usize = 32;
