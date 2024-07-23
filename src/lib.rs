@@ -163,4 +163,3 @@ impl io::Write for Vec<u8> {
         Ok(())
     }
 }
-

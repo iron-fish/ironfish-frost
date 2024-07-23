@@ -4,22 +4,12 @@
 
 use core::fmt;
 
-#[cfg(feature = "std")]
 use siphasher::sip::SipHasher24;
-#[cfg(feature = "std")]
 pub(crate) type ChecksumHasher = SipHasher24;
-
-#[cfg(not(feature = "std"))]
-use core::hash::SipHasher;
-#[cfg(not(feature = "std"))]
-pub(crate) type ChecksumHasher = SipHasher;
-
 
 pub(crate) const CHECKSUM_LEN: usize = 8;
 
 pub(crate) type Checksum = u64;
-
-
 
 #[derive(Clone, Debug)]
 pub enum ChecksumError {

@@ -16,7 +16,6 @@ use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
 use crate::io;
 use crate::multienc;
-use crate::multienc::read_encrypted_blob;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;

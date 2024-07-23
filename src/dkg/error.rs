@@ -4,17 +4,14 @@
 
 use crate::checksum::ChecksumError;
 use crate::frost;
+use crate::io;
 use core::fmt;
 use core::fmt::Debug;
-use crate::io;
-
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
-
-
 
 #[derive(Debug)]
 pub enum Error {
