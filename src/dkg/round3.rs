@@ -12,6 +12,7 @@ use crate::dkg::round2::import_secret_package;
 use crate::frost::keys::dkg::part3;
 use crate::frost::keys::KeyPackage;
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
+use crate::io;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use crate::serde::read_u16;
@@ -20,25 +21,21 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
-use reddsa::frost::redjubjub::VerifyingKey;
+use alloc::borrow::ToOwned;
 use core::borrow::Borrow;
-use crate::io;
+use reddsa::frost::redjubjub::VerifyingKey;
 
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
-
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 use alloc::string::ToString;
-
-
-
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyPackage {
@@ -68,6 +65,17 @@ impl PublicKeyPackage {
         &self.identities[..]
     }
 
+    pub fn get_size(&self) -> Result<usize, io::Error> {
+        let pkp = self
+            .frost_public_key_package
+            .serialize()
+            .map_err(io::Error::other)?;
+        let identities = (self.identities()[0].serialize().len() + 2) * self.identities.len();
+        // 2 bytes for length
+        let min_signers = 2;
+        Ok(pkp.len() + identities + min_signers)
+    }
+
     pub fn verifying_key(&self) -> &VerifyingKey {
         self.frost_public_key_package.verifying_key()
     }
@@ -81,8 +89,9 @@ impl PublicKeyPackage {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        self.serialize_into(&mut bytes)
+        let size = self.get_size().expect("serialization failed");
+        let mut bytes = Vec::with_capacity(size);
+        self.serialize_into(&mut bytes.as_mut_slice())
             .expect("serialization failed");
         bytes
     }
