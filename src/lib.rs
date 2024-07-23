@@ -42,7 +42,7 @@ mod io {
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(not(feature = "std"))]
+#[cfg(feature = "dkg")]
 mod io {
     use core::cmp;
     use core::mem;
@@ -163,4 +163,3 @@ impl io::Write for Vec<u8> {
         Ok(())
     }
 }
-
