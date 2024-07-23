@@ -14,6 +14,7 @@ use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
+use crate::io;
 use crate::multienc;
 use crate::multienc::read_encrypted_blob;
 use crate::participant;
@@ -24,22 +25,19 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use core::borrow::Borrow;
-use crate::io;
 
-use core::mem;
 use core::hash::Hasher;
-
+use core::mem;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-#[cfg(not(feature = "std"))]
 use alloc::string::ToString;
-
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -261,7 +259,7 @@ impl PublicPackage {
         self.identity.serialize_into(&mut writer)?;
         let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.group_secret_key_shard_encrypted[..])?;
+        write_variable_length_bytes(&mut writer, &self.group_secret_key_shard_encrypted)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
@@ -271,8 +269,7 @@ impl PublicPackage {
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
-
-        let group_secret_key_shard_encrypted = read_encrypted_blob(&mut reader)?;
+        let group_secret_key_shard_encrypted = read_variable_length_bytes(&mut reader)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -502,6 +499,13 @@ mod tests {
         let deserialized = PublicPackage::deserialize_from(&serialized[..])
             .expect("package deserialization failed");
 
+        assert_eq!(public_package.identity, deserialized.identity);
+        assert_eq!(public_package.checksum, deserialized.checksum);
+        assert_eq!(public_package.frost_package, deserialized.frost_package);
+        assert_eq!(
+            public_package.group_secret_key_shard_encrypted,
+            deserialized.group_secret_key_shard_encrypted
+        );
         assert_eq!(public_package, deserialized);
     }
 
