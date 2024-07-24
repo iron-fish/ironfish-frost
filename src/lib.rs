@@ -42,7 +42,7 @@ mod io {
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(feature = "dkg")]
+#[cfg(not(feature = "std"))]
 mod io {
     use core::cmp;
     use core::mem;

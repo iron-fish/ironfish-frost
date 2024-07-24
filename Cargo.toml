@@ -24,7 +24,7 @@ hex-literal = "0.4.1"
 rand = "0.8.5"
 
 [features]
-default = ["dkg"]
+default = ["signing"]
 
 std = []
 signing = ["dep:blake3", "dep:rand_chacha", "std"]
