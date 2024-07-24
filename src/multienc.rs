@@ -43,17 +43,17 @@ where
     let mut result = Vec::new();
 
     let mut header_bytes = [0u8; HEADER_SIZE];
-    reader.read(&mut header_bytes)?;
+    reader.read_exact(&mut header_bytes)?;
     let header: Header = Header::deserialize_from(&header_bytes[..])?;
 
     for _ in 0..header.num_recipients {
         let mut key_bytes = vec![0u8; KEY_SIZE];
-        reader.read(&mut key_bytes)?;
+        reader.read_exact(&mut key_bytes)?;
         result.extend(key_bytes);
     }
 
     let mut data_bytes = vec![0u8; header.data_len];
-    reader.read(&mut data_bytes)?;
+    reader.read_exact(&mut data_bytes)?;
     result.extend(data_bytes);
 
     Ok(result)
