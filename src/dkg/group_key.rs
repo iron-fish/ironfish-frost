@@ -69,6 +69,7 @@ impl GroupSecretKeyShard {
         Ok(Self { shard })
     }
 
+    #[cfg(feature = "std")]
     pub fn export<'a, I, R>(&self, recipients: I, csrng: R) -> Vec<u8>
     where
         I: IntoIterator<Item = &'a Identity>,
@@ -78,6 +79,8 @@ impl GroupSecretKeyShard {
         multienc::encrypt(&self.shard, recipients, csrng)
     }
 
+
+    #[cfg(feature = "std")]
     pub fn import(secret: &Secret, exported: &[u8]) -> io::Result<Self> {
         let bytes = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
 
@@ -169,6 +172,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn export_import() {
         let secrets = [
             Secret::random(thread_rng()),
