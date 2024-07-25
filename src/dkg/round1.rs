@@ -19,7 +19,9 @@ use crate::multienc;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;
+#[cfg(feature = "std")]
 use crate::serde::read_variable_length;
+#[cfg(feature = "std")]
 use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;

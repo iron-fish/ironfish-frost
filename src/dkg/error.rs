@@ -10,7 +10,8 @@ use core::fmt::Debug;
 
 #[derive(Debug)]
 pub enum Error {
-    InvalidInput(String),
+    // TODO(jwp): potentially remove these to reduce binary size
+    InvalidInput(&'static str),
     FrostError(frost::Error),
     EncryptionError(io::Error),
     DecryptionError(io::Error),
