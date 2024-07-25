@@ -12,6 +12,7 @@ use crate::dkg::round2::import_secret_package;
 use crate::frost::keys::dkg::part3;
 use crate::frost::keys::KeyPackage;
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
+use crate::io;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use crate::serde::read_u16;
@@ -20,10 +21,11 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
 use reddsa::frost::redjubjub::VerifyingKey;
-use std::borrow::Borrow;
+
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::io;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyPackage {
@@ -72,7 +74,6 @@ impl PublicKeyPackage {
         bytes
     }
 
-    #[cfg(feature = "std")]
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         let frost_public_key_package = self
             .frost_public_key_package
@@ -87,7 +88,6 @@ impl PublicKeyPackage {
         Ok(())
     }
 
-    #[cfg(feature = "std")]
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let frost_public_key_package = read_variable_length_bytes(&mut reader)?;
         let frost_public_key_package =

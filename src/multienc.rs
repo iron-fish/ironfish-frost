@@ -30,29 +30,30 @@ pub const fn metadata_size(num_recipients: usize) -> usize {
 }
 
 #[cfg(feature = "std")]
-pub fn read_encrypted_blob<R>(mut reader: R) -> io::Result<Vec<u8>>
+pub fn read_encrypted_blob<R>(reader: &mut R) -> Result<Vec<u8>, io::Error>
 where
-    R: io::Read,
+    R: crate::io::Read,
 {
-    use std::io::Read;
-
     let mut result = Vec::new();
-    let reader = reader.by_ref();
 
-    reader.take(HEADER_SIZE as u64).read_to_end(&mut result)?;
+    let mut header_bytes = [0u8; HEADER_SIZE];
+    reader.read_exact(&mut header_bytes)?;
+    let header: Header = Header::deserialize_from(&header_bytes[..])?;
 
-    let header = Header::deserialize_from(&result[..])?;
     for _ in 0..header.num_recipients {
-        reader.take(KEY_SIZE as u64).read_to_end(&mut result)?;
+        let mut key_bytes = vec![0u8; KEY_SIZE];
+        reader.read_exact(&mut key_bytes)?;
+        result.extend(key_bytes);
     }
-    reader
-        .take(header.data_len as u64)
-        .read_to_end(&mut result)?;
+
+    let mut data_bytes = vec![0u8; header.data_len];
+    reader.read_exact(&mut data_bytes)?;
+    result.extend(data_bytes);
 
     Ok(result)
 }
 
-#[must_use]
+// #[must_use]
 #[cfg(feature = "std")]
 pub fn encrypt<'a, I, R>(data: &[u8], recipients: I, csrng: R) -> Vec<u8>
 where
@@ -63,8 +64,8 @@ where
     let recipients = recipients.into_iter();
     let metadata_len = metadata_size(recipients.len());
     let mut result = vec![0u8; metadata_len + data.len()];
-    let (metadata, ciphertext) = result.split_at_mut(metadata_len);
 
+    let (metadata, ciphertext) = result.split_at_mut(metadata_len);
     ciphertext.copy_from_slice(data);
     encrypt_in_place(ciphertext, metadata, recipients, csrng).expect("failed to encrypt data");
 
@@ -136,11 +137,11 @@ where
     Ok(())
 }
 
+#[cfg(feature = "std")]
 /// Decrypts data produced by [`encrypt`] or [`encrypt_in_place`] using one participant secret.
 ///
 /// This method expects the ciphertext and the metadata to be concatenated in one slice. Use
 /// [`decrypt_in_place`] if you have two separate slices.
-#[cfg(feature = "std")]
 pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
     let header = Header::deserialize_from(data)?;
     let metadata_len = metadata_size(header.num_recipients);
@@ -148,7 +149,14 @@ pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
         .checked_add(header.data_len)
         .ok_or_else(|| io::Error::other("overflow when calculating data size"))?;
     if data.len() < total_len {
-        return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+        #[cfg(feature = "std")]
+        {
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            return Err(io::Error);
+        }
     }
 
     let (metadata, ciphertext) = data.split_at(metadata_len);
@@ -241,7 +249,6 @@ impl Header {
         write_usize(&mut writer, self.data_len)
     }
 
-    #[cfg(feature = "std")]
     fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let mut agreement_key = [0u8; 32];
         reader.read_exact(&mut agreement_key)?;
@@ -264,8 +271,8 @@ impl Header {
 }
 
 #[cfg(test)]
+#[cfg(feature = "std")]
 mod tests {
-    #[cfg(feature = "std")]
     mod detached {
         use crate::multienc::decrypt;
         use crate::multienc::encrypt;

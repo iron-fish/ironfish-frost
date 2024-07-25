@@ -16,6 +16,7 @@ use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
+use crate::io;
 use crate::multienc;
 use crate::participant;
 use crate::participant::Identity;
@@ -25,13 +26,15 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
+use core::hash::Hasher;
+use core::mem;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::borrow::Borrow;
+// use log::info;
+
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::hash::Hasher;
-use std::io;
-use std::mem;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -153,7 +156,7 @@ pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> io::Result<SecretPackage> {
-    let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 

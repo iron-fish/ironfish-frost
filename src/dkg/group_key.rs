@@ -2,12 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use crate::io;
 use crate::multienc;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::io;
 
 pub const GROUP_SECRET_KEY_LEN: usize = 32;
 
@@ -69,6 +69,7 @@ impl GroupSecretKeyShard {
         Ok(Self { shard })
     }
 
+    #[cfg(feature = "std")]
     pub fn export<'a, I, R>(&self, recipients: I, csrng: R) -> Vec<u8>
     where
         I: IntoIterator<Item = &'a Identity>,
@@ -78,8 +79,10 @@ impl GroupSecretKeyShard {
         multienc::encrypt(&self.shard, recipients, csrng)
     }
 
+
+    #[cfg(feature = "std")]
     pub fn import(secret: &Secret, exported: &[u8]) -> io::Result<Self> {
-        let bytes = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+        let bytes = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
 
         if bytes.len() != GROUP_SECRET_KEY_LEN {
             return Err(io::Error::other(
@@ -169,6 +172,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn export_import() {
         let secrets = [
             Secret::random(thread_rng()),

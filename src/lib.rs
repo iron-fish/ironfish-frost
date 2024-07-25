@@ -11,7 +11,6 @@
 
 mod serde;
 
-#[cfg(feature = "signing")]
 mod checksum;
 
 pub mod multienc;
@@ -52,7 +51,7 @@ mod io {
         }
     }
 
-    pub type Result<T> = core::result::Result<T, Error>;
+    pub(crate) type Result<T> = core::result::Result<T, Error>;
 
     pub trait Read {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
@@ -72,6 +71,13 @@ mod io {
             } else {
                 Err(Error)
             }
+        }
+
+        fn by_ref(&mut self) -> &mut Self
+        where
+            Self: Sized,
+        {
+            self
         }
     }
 

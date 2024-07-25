@@ -16,7 +16,7 @@ ed25519-dalek = { version = "2.1.0", features = ["rand_core"] }
 rand_chacha = { version = "0.3.1", optional = true }
 rand_core = "0.6.4"
 reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev = "311baf8865f6e21527d1f20750d8f2cf5c9e531a", features = ["frost", "frost-rerandomized"] }
-siphasher = { version = "1.0.0", optional = true }
+siphasher = { version = "1.0.0", features =["serde_no_std"] }
 x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets"] }
 
 [dev-dependencies]
@@ -24,8 +24,8 @@ hex-literal = "0.4.1"
 rand = "0.8.5"
 
 [features]
-default = ["std", "signing"]
+default = ["dkg"]
 
 std = []
-signing = ["dep:blake3", "dep:rand_chacha", "dep:siphasher", "std"]
-dkg = ["std", "signing"]
+signing = ["dep:blake3", "dep:rand_chacha", "std"]
+dkg = []
