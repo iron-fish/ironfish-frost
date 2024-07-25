@@ -36,13 +36,6 @@ use rand_core::RngCore;
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::collections::BTreeMap;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
 /// Copy of the [`frost_core::dkg::round2::SecretPackage`] struct. Necessary to implement

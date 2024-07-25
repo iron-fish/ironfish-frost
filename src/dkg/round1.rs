@@ -31,13 +31,6 @@ use rand_core::RngCore;
 use core::hash::Hasher;
 use core::mem;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::string::ToString;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
 /// Copy of the [`frost_core::dkg::round1::SecretPackage`] struct. Necessary to implement

@@ -8,11 +8,6 @@ use crate::io;
 use core::fmt;
 use core::fmt::Debug;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
-
 #[derive(Debug)]
 pub enum Error {
     InvalidInput(String),

@@ -9,11 +9,6 @@ use crate::participant::Secret;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
 pub const GROUP_SECRET_KEY_LEN: usize = 32;
 
 pub type GroupSecretKey = [u8; GROUP_SECRET_KEY_LEN];

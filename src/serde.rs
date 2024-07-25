@@ -6,11 +6,6 @@
 
 use crate::io;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
 #[inline]
 #[cfg(feature = "dkg")]
 pub(crate) fn write_u16<W: io::Write>(mut writer: W, value: u16) -> io::Result<()> {
@@ -77,8 +72,8 @@ pub(crate) fn read_usize<R: io::Read>(reader: R) -> io::Result<usize> {
     read_u32(reader).map(|value| value as usize)
 }
 
-#[inline]
-#[cfg(feature = "dkg")]
+// #[inline]
+#[cfg(feature = "std")]
 pub(crate) fn read_variable_length<R, F, T>(mut reader: R, f: F) -> io::Result<Vec<T>>
 where
     R: io::Read,
@@ -92,8 +87,8 @@ where
     Ok(items)
 }
 
-#[inline]
-#[cfg(feature = "dkg")]
+// #[inline]
+#[cfg(feature = "std")]
 pub(crate) fn read_variable_length_bytes<R: io::Read>(mut reader: R) -> io::Result<Vec<u8>> {
     let len = read_usize(&mut reader)?;
     let mut bytes = vec![0u8; len];
@@ -172,7 +167,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "dkg")]
+    #[cfg(feature = "std")]
     fn write_read_variable_length() {
         test_serde!(
             Vec::<u16>::new(),
@@ -194,7 +189,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "dkg")]
+    #[cfg(feature = "std")]
     fn write_read_variable_length_bytes() {
         test_serde!(
             &b""[..],

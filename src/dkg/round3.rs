@@ -27,15 +27,6 @@ use reddsa::frost::redjubjub::VerifyingKey;
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::collections::BTreeMap;
-#[cfg(not(feature = "std"))]
-use alloc::string::ToString;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyPackage {
     frost_public_key_package: FrostPublicKeyPackage,

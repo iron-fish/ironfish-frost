@@ -20,13 +20,6 @@ use rand_core::RngCore;
 use x25519_dalek::PublicKey;
 use x25519_dalek::ReusableSecret;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-use crate::alloc::borrow::ToOwned;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
-
 pub const HEADER_SIZE: usize = 56;
 pub const KEY_SIZE: usize = 32;
 
@@ -36,6 +29,7 @@ pub const fn metadata_size(num_recipients: usize) -> usize {
     HEADER_SIZE + KEY_SIZE * num_recipients
 }
 
+#[cfg(feature = "std")]
 pub fn read_encrypted_blob<R>(reader: &mut R) -> Result<Vec<u8>, io::Error>
 where
     R: crate::io::Read,
@@ -59,7 +53,8 @@ where
     Ok(result)
 }
 
-#[must_use]
+// #[must_use]
+#[cfg(feature = "std")]
 pub fn encrypt<'a, I, R>(data: &[u8], recipients: I, csrng: R) -> Vec<u8>
 where
     I: IntoIterator<Item = &'a Identity>,
@@ -142,6 +137,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "std")]
 /// Decrypts data produced by [`encrypt`] or [`encrypt_in_place`] using one participant secret.
 ///
 /// This method expects the ciphertext and the metadata to be concatenated in one slice. Use
@@ -275,6 +271,7 @@ impl Header {
 }
 
 #[cfg(test)]
+#[cfg(feature = "std")]
 mod tests {
     mod detached {
         use crate::multienc::decrypt;
