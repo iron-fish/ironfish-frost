@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn same_input() {
-        let secret = SigningShare::deserialize(*b"some signing share.............\0").unwrap();
+        let secret = SigningShare::deserialize(b"some signing share.............\0").unwrap();
         let transaction_hash = b"some hash";
         let p1 = Secret::random(thread_rng()).to_identity();
         let p2 = Secret::random(thread_rng()).to_identity();
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn different_participants_order() {
-        let secret = SigningShare::deserialize(*b"some signing share.............\0").unwrap();
+        let secret = SigningShare::deserialize(b"some signing share.............\0").unwrap();
         let transaction_hash = b"some hash";
         let p1 = Secret::random(thread_rng()).to_identity();
         let p2 = Secret::random(thread_rng()).to_identity();
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn repeated_participants() {
-        let secret = SigningShare::deserialize(*b"some signing share.............\0").unwrap();
+        let secret = SigningShare::deserialize(b"some signing share.............\0").unwrap();
         let transaction_hash = b"some hash";
         let p1 = Secret::random(thread_rng()).to_identity();
         let p2 = Secret::random(thread_rng()).to_identity();
@@ -158,8 +158,8 @@ mod tests {
 
     #[test]
     fn different_shares() {
-        let secret1 = SigningShare::deserialize(*b"some signing share.............\0").unwrap();
-        let secret2 = SigningShare::deserialize(*b"some other signing share.......\0").unwrap();
+        let secret1 = SigningShare::deserialize(b"some signing share.............\0").unwrap();
+        let secret2 = SigningShare::deserialize(b"some other signing share.......\0").unwrap();
         let transaction_hash = b"some hash";
         let p1 = Secret::random(thread_rng()).to_identity();
         let p2 = Secret::random(thread_rng()).to_identity();
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn different_transactions() {
-        let secret = SigningShare::deserialize(*b"some signing share.............\0").unwrap();
+        let secret = SigningShare::deserialize(b"some signing share.............\0").unwrap();
         let transaction_hash1 = b"some hash";
         let transaction_hash2 = b"some other hash";
         let p1 = Secret::random(thread_rng()).to_identity();
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn different_participants() {
-        let secret = SigningShare::deserialize(*b"some signing share.............\0").unwrap();
+        let secret = SigningShare::deserialize(b"some signing share.............\0").unwrap();
         let transaction_hash = b"some hash";
         let p1 = Secret::random(thread_rng()).to_identity();
         let p2 = Secret::random(thread_rng()).to_identity();

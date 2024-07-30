@@ -13,6 +13,7 @@ mod serde;
 
 mod checksum;
 
+pub mod error;
 pub mod multienc;
 pub mod participant;
 
