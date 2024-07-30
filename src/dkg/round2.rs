@@ -329,18 +329,19 @@ impl CombinedPublicPackage {
         Ok(write_variable_length(
             writer,
             &self.packages,
-            |writer, pkg| Ok(pkg.serialize_without_sender_into(writer)?),
+            |writer, pkg| {
+                pkg.serialize_without_sender_into(writer)
+                    .map_err(|_| io::Error::other("serialize_into failed"))
+            },
         )?)
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let sender_identity = Identity::deserialize_from(&mut reader)?;
 
         let packages = read_variable_length(reader, move |reader| {
-            Ok(PublicPackage::deserialize_without_sender_from(
-                reader,
-                sender_identity.clone(),
-            )?)
+            PublicPackage::deserialize_without_sender_from(reader, sender_identity.clone())
+                .map_err(|_| io::Error::other("deserialization failed"))
         })?;
 
         Ok(Self { packages })

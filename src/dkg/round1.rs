@@ -16,6 +16,7 @@ use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
 use crate::io;
 use crate::multienc;
+use crate::multienc::read_encrypted_blob;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;
@@ -33,8 +34,6 @@ use core::mem;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::string::ToString;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 

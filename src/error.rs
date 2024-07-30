@@ -6,12 +6,13 @@ use reddsa::frost::redjubjub::frost::Error as FrostError;
 use reddsa::frost::redjubjub::JubjubBlake2b512;
 
 use crate::checksum::ChecksumError;
+use crate::io;
 
 #[derive(Debug)]
 pub enum IronfishFrostError {
     InvalidInput,
     StdError,
-    IoError(std::io::Error),
+    IoError(io::Error),
     FrostError(FrostError<JubjubBlake2b512>),
     SignatureError(ed25519_dalek::SignatureError),
     ChecksumError(ChecksumError),
@@ -23,8 +24,8 @@ impl From<FrostError<JubjubBlake2b512>> for IronfishFrostError {
     }
 }
 
-impl From<std::io::Error> for IronfishFrostError {
-    fn from(error: std::io::Error) -> Self {
+impl From<io::Error> for IronfishFrostError {
+    fn from(error: io::Error) -> Self {
         IronfishFrostError::IoError(error)
     }
 }
@@ -32,14 +33,5 @@ impl From<std::io::Error> for IronfishFrostError {
 impl From<ed25519_dalek::SignatureError> for IronfishFrostError {
     fn from(error: ed25519_dalek::SignatureError) -> Self {
         IronfishFrostError::SignatureError(error)
-    }
-}
-
-impl From<IronfishFrostError> for std::io::Error {
-    fn from(error: IronfishFrostError) -> Self {
-        match error {
-            IronfishFrostError::IoError(e) => e,
-            _ => std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", error)),
-        }
     }
 }

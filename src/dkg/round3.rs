@@ -83,7 +83,6 @@ impl PublicKeyPackage {
         bytes
     }
 
-    #[cfg(feature = "std")]
     pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         let frost_public_key_package = self.frost_public_key_package.serialize()?;
         write_variable_length_bytes(&mut writer, &frost_public_key_package)?;
