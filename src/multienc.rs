@@ -60,7 +60,7 @@ where
 }
 
 #[must_use]
-pub fn encrypt<'a, I, R>(data: &[u8], recipients: I, csrng: R) -> Vec<u8>
+pub fn encrypt<'a, I, R>(data: &[u8], recipients: I, mut csrng: R) -> Vec<u8>
 where
     I: IntoIterator<Item = &'a Identity>,
     I::IntoIter: ExactSizeIterator,
@@ -72,7 +72,7 @@ where
 
     let (metadata, ciphertext) = result.split_at_mut(metadata_len);
     ciphertext.copy_from_slice(data);
-    encrypt_in_place(ciphertext, metadata, recipients, csrng).expect("failed to encrypt data");
+    encrypt_in_place(ciphertext, metadata, recipients, &mut csrng).expect("failed to encrypt data");
 
     result
 }
@@ -118,7 +118,7 @@ where
     // We write the number of recipients and the length of the ciphertext in the metadata for
     // convenience, to make decryption easier for the caller. Both numbers are unauthenticated,
     // again for the reason outline above: we rely on the ChaCha20Poly1305 tag for integrity.
-    let agreement_secret = ReusableSecret::random_from_rng(csrng);
+    let agreement_secret = ReusableSecret::random_from_rng(&mut csrng);
     let agreement_key = PublicKey::from(&agreement_secret);
 
     let header = Header {

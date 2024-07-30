@@ -16,6 +16,7 @@ use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
 use crate::io;
 use crate::multienc;
+use crate::multienc::read_encrypted_blob;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;
@@ -33,8 +34,6 @@ use core::mem;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::string::ToString;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
@@ -143,7 +142,7 @@ pub(super) fn get_secret_package_signers(pkg: &SecretPackage) -> (u16, u16) {
 pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
-    csrng: R,
+    mut csrng: R,
 ) -> io::Result<Vec<u8>> {
     let serializable = <&SerializableSecretPackage>::from(pkg);
     if serializable.identifier != identity.to_frost_identifier() {
@@ -154,7 +153,7 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
     serializable
         .serialize_into(&mut serialized)
         .expect("serialization failed");
-    Ok(multienc::encrypt(&serialized, [identity], csrng))
+    Ok(multienc::encrypt(&serialized, [identity], &mut csrng))
 }
 
 pub fn import_secret_package(

@@ -30,8 +30,3 @@ impl fmt::Display for ChecksumError {
         }
     }
 }
-
-#[cfg(feature = "std")]
-use std::error;
-#[cfg(feature = "std")]
-impl error::Error for ChecksumError {}
