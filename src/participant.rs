@@ -70,6 +70,21 @@ pub struct Secret {
     identity: OnceCell<Identity>,
 }
 
+pub struct Secret2 {
+    decryption_key: StaticSecret,
+    identity: OnceCell<Identity>,
+}
+
+impl Secret2 {
+    #[must_use]
+    pub fn random<T: RngCore + CryptoRng>(mut csprng: T) -> Self {
+        Self {
+            decryption_key: StaticSecret::random_from_rng(&mut csprng),
+            identity: OnceCell::new(),
+        }
+    }
+}
+
 impl Secret {
     #[must_use]
     pub fn random<T: RngCore + CryptoRng>(mut csprng: T) -> Self {
@@ -237,7 +252,7 @@ impl Identity {
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
         let verification_key =
-            VerifyingKey::from_bytes(&verification_key).map_err(io::Error::other)?;
+            VerifyingKey::from_bytes(&verification_key).map_err(|_| io::Error::other("verification key from bytes failed"))?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -247,7 +262,7 @@ impl Identity {
         reader.read_exact(&mut signature)?;
         let signature = Signature::from(signature);
 
-        Self::new(verification_key, encryption_key, signature).map_err(io::Error::other)
+        Self::new(verification_key, encryption_key, signature).map_err(|_| io::Error::other("signature verification failed"))
     }
 
     pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {

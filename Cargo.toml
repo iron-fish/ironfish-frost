@@ -19,14 +19,14 @@ reddsa = { path = "../reddsa",  features = ["frost", "alloc"], default-features 
 frost-core = { git = "https://github.com/ZcashFoundation/frost.git", rev = "c6c3f2f", package = "frost-core", features = ["serialization", "serde", "cheater-detection"], default-features = false }
 frost-rerandomized = { git = "https://github.com/ZcashFoundation/frost.git", rev = "c6c3f2f", package = "frost-rerandomized", features = ["serialization", "cheater-detection"], default-features = false }
 siphasher = { version = "1.0.0", default-features = false }
-x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets"], default-features = false }
+x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets", "getrandom"], default-features = false }
 
 [dev-dependencies]
 hex-literal = "0.4.1"
 rand = "0.8.5"
 
 [features]
-default = ["dkg"]
+default = ["dkg","signing"]
 
 std = []
 signing = ["dep:blake3", "dep:rand_chacha", "std"]

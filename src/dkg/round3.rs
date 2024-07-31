@@ -32,8 +32,6 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
-use alloc::string::ToString;
-#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]

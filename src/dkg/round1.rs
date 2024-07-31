@@ -200,7 +200,7 @@ impl PublicPackage {
         participants: &[I],
         frost_package: Package,
         group_secret_key_shard: GroupSecretKeyShard,
-        csrng: R,
+        mut csrng: R,
     ) -> Self
     where
         I: Borrow<Identity>,
@@ -211,7 +211,7 @@ impl PublicPackage {
         let group_secret_key_shard_encrypted = multienc::encrypt(
             &group_secret_key_shard.serialize(),
             participants.iter().map(Borrow::borrow),
-            csrng,
+            &mut csrng,
         );
 
         PublicPackage {
