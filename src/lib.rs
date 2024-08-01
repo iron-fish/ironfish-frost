@@ -11,9 +11,9 @@
 
 mod serde;
 
-#[cfg(feature = "signing")]
 mod checksum;
 
+pub mod error;
 pub mod multienc;
 pub mod participant;
 
@@ -39,6 +39,11 @@ mod io {
 }
 
 #[cfg(not(feature = "std"))]
+#[macro_use]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
 mod io {
     use core::cmp;
     use core::mem;
@@ -52,7 +57,7 @@ mod io {
         }
     }
 
-    pub type Result<T> = core::result::Result<T, Error>;
+    pub(crate) type Result<T> = core::result::Result<T, Error>;
 
     pub trait Read {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
@@ -72,6 +77,13 @@ mod io {
             } else {
                 Err(Error)
             }
+        }
+
+        fn by_ref(&mut self) -> &mut Self
+        where
+            Self: Sized,
+        {
+            self
         }
     }
 
@@ -134,5 +146,21 @@ mod io {
             *self = remaining;
             Ok(n)
         }
+    }
+}
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
+#[cfg(not(feature = "std"))]
+impl io::Write for Vec<u8> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.extend_from_slice(buf);
+        Ok(())
     }
 }

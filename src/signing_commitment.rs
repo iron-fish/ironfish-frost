@@ -6,6 +6,7 @@ use crate::checksum::Checksum;
 use crate::checksum::ChecksumError;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
+use crate::error::IronfishFrostError;
 use crate::frost::keys::SigningShare;
 use crate::frost::round1::NonceCommitment;
 use crate::frost::round1::SigningCommitments;
@@ -13,7 +14,6 @@ use crate::nonces::deterministic_signing_nonces;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use crate::participant::Signature;
-use crate::participant::SignatureError;
 use crate::participant::IDENTITY_LEN;
 use std::borrow::Borrow;
 use std::hash::Hasher;
@@ -45,17 +45,16 @@ where
     hasher.finish()
 }
 
-#[must_use]
 fn authenticated_data(
     identity: &Identity,
     raw_commitments: &SigningCommitments,
     checksum: Checksum,
-) -> [u8; AUTHENTICATED_DATA_LEN] {
+) -> Result<[u8; AUTHENTICATED_DATA_LEN], IronfishFrostError> {
     let mut data = [0u8; AUTHENTICATED_DATA_LEN];
     let parts = [
         &identity.serialize()[..],
-        &raw_commitments.hiding().serialize(),
-        &raw_commitments.binding().serialize(),
+        &raw_commitments.hiding().serialize()?,
+        &raw_commitments.binding().serialize()?,
         &checksum.to_le_bytes(),
     ];
     let mut slice = &mut data[..];
@@ -64,7 +63,7 @@ fn authenticated_data(
         slice = &mut slice[part.len()..];
     }
     debug_assert_eq!(slice.len(), 0);
-    data
+    Ok(data)
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -85,7 +84,7 @@ impl SigningCommitment {
         raw_commitments: SigningCommitments,
         checksum: Checksum,
         signature: Signature,
-    ) -> Result<Self, SignatureError> {
+    ) -> Result<Self, IronfishFrostError> {
         let signing_commitment = Self {
             identity,
             raw_commitments,
@@ -97,13 +96,12 @@ impl SigningCommitment {
             .map(|_| signing_commitment)
     }
 
-    #[must_use]
     pub fn from_secrets<I>(
         participant_secret: &Secret,
         secret_share: &SigningShare,
         transaction_hash: &[u8],
         signing_participants: &[I],
-    ) -> SigningCommitment
+    ) -> Result<SigningCommitment, IronfishFrostError>
     where
         I: Borrow<Identity>,
     {
@@ -112,21 +110,22 @@ impl SigningCommitment {
             deterministic_signing_nonces(secret_share, transaction_hash, signing_participants);
         let raw_commitments = *nonces.commitments();
         let checksum = input_checksum(transaction_hash, signing_participants);
-        let authenticated_data = authenticated_data(&identity, &raw_commitments, checksum);
+        let authenticated_data = authenticated_data(&identity, &raw_commitments, checksum)?;
         let signature = participant_secret.sign(&authenticated_data);
-        SigningCommitment {
+        Ok(SigningCommitment {
             identity,
             raw_commitments,
             checksum,
             signature,
-        }
+        })
     }
 
-    pub fn verify_authenticity(&self) -> Result<(), SignatureError> {
+    pub fn verify_authenticity(&self) -> Result<(), IronfishFrostError> {
         let authenticated_data =
-            authenticated_data(&self.identity, &self.raw_commitments, self.checksum);
-        self.identity
-            .verify_data(&authenticated_data, &self.signature)
+            authenticated_data(&self.identity, &self.raw_commitments, self.checksum)?;
+        Ok(self
+            .identity
+            .verify_data(&authenticated_data, &self.signature)?)
     }
 
     pub fn verify_checksum<I>(
@@ -172,16 +171,16 @@ impl SigningCommitment {
         bytes
     }
 
-    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         writer.write_all(&self.signature.to_bytes())?;
         writer.write_all(&self.identity.serialize())?;
-        writer.write_all(&self.hiding().serialize())?;
-        writer.write_all(&self.binding().serialize())?;
+        writer.write_all(&self.hiding().serialize()?)?;
+        writer.write_all(&self.binding().serialize()?)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let mut signature_bytes = [0u8; Signature::BYTE_SIZE];
         reader.read_exact(&mut signature_bytes)?;
         let signature = Signature::from_bytes(&signature_bytes);
@@ -190,11 +189,11 @@ impl SigningCommitment {
 
         let mut hiding = [0u8; 32];
         reader.read_exact(&mut hiding)?;
-        let hiding = NonceCommitment::deserialize(hiding).map_err(io::Error::other)?;
+        let hiding = NonceCommitment::deserialize(&hiding[..])?;
 
         let mut binding = [0u8; 32];
         reader.read_exact(&mut binding)?;
-        let binding = NonceCommitment::deserialize(binding).map_err(io::Error::other)?;
+        let binding = NonceCommitment::deserialize(&binding[..])?;
 
         let raw_commitments = SigningCommitments::new(hiding, binding);
 
@@ -203,7 +202,6 @@ impl SigningCommitment {
         let checksum = Checksum::from_le_bytes(checksum);
 
         Self::from_raw_parts(identity, raw_commitments, checksum, signature)
-            .map_err(io::Error::other)
     }
 }
 
@@ -233,7 +231,8 @@ mod tests {
             &signing_share,
             b"transaction hash",
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         let serialized = commitment.serialize();
 
@@ -279,7 +278,8 @@ mod tests {
             &signing_share,
             b"transaction hash",
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         let serialized = commitment.serialize();
 
@@ -307,7 +307,8 @@ mod tests {
             &signing_share,
             b"transaction hash",
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         assert!(commitment.verify_authenticity().is_ok());
     }
@@ -329,14 +330,18 @@ mod tests {
             &signing_share,
             b"transaction hash",
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         let unrelated_secret = Secret::random(&mut rng);
-        let invalid_signature = unrelated_secret.sign(&authenticated_data(
-            commitment.identity(),
-            commitment.raw_commitments(),
-            commitment.checksum(),
-        ));
+        let invalid_signature = unrelated_secret.sign(
+            &authenticated_data(
+                commitment.identity(),
+                commitment.raw_commitments(),
+                commitment.checksum(),
+            )
+            .expect("authenticated data failed to return"),
+        );
 
         let invalid_commitment = SigningCommitment {
             identity: commitment.identity().clone(),
@@ -368,14 +373,16 @@ mod tests {
             &signing_share1,
             transaction_hash,
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         let commitment2 = SigningCommitment::from_secrets(
             &secret2,
             &signing_share2,
             transaction_hash,
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         assert_ne!(commitment1, commitment2);
         assert_eq!(commitment1.checksum(), commitment2.checksum());
@@ -398,14 +405,16 @@ mod tests {
             &signing_share,
             b"something",
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         let commitment2 = SigningCommitment::from_secrets(
             &secret,
             &signing_share,
             b"something else",
             &signing_participants,
-        );
+        )
+        .expect("commitment creation failed");
 
         assert_ne!(commitment1.checksum(), commitment2.checksum());
     }
@@ -433,14 +442,16 @@ mod tests {
             &signing_share,
             transaction_hash,
             &signing_participants1,
-        );
+        )
+        .expect("commitment creation failed");
 
         let commitment2 = SigningCommitment::from_secrets(
             &secret,
             &signing_share,
             transaction_hash,
             &signing_participants2,
-        );
+        )
+        .expect("commitment creation failed");
 
         assert_ne!(commitment1.checksum(), commitment2.checksum());
     }
