@@ -268,7 +268,7 @@ impl PublicPackage {
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package)?;
 
-        let group_secret_key_shard_encrypted = read_encrypted_blob(&mut reader)?;
+        let group_secret_key_shard_encrypted = read_variable_length_bytes(&mut reader)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
