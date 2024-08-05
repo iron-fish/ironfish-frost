@@ -15,7 +15,7 @@ chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.0", features = ["rand_core", "alloc"], default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 rand_core = { version = "0.6.4", features = ["alloc"], default-features = false }
-reddsa = { path = "../reddsa",  features = ["frost", "alloc"], default-features = false }
+reddsa = { git = "https://github.com/iron-fish/reddsa.git", branch = "main",  features = ["frost", "alloc"], default-features = false }
 frost-core = { git = "https://github.com/ZcashFoundation/frost.git", rev = "c6c3f2f", package = "frost-core", features = ["serialization", "serde", "cheater-detection"], default-features = false }
 frost-rerandomized = { git = "https://github.com/ZcashFoundation/frost.git", rev = "c6c3f2f", package = "frost-rerandomized", features = ["serialization", "cheater-detection"], default-features = false }
 siphasher = { version = "1.0.0", default-features = false }
