@@ -12,19 +12,21 @@ repository = "https://github.com/iron-fish/ironfish-frost"
 blake3 = { version = "1.5.0", optional = true }
 chacha20 = "0.9.1"
 chacha20poly1305 = "0.10.1"
-ed25519-dalek = { version = "2.1.0", features = ["rand_core"] }
+ed25519-dalek = { version = "2.1.0", default-features = false, features = ["rand_core", "alloc"] }
 rand_chacha = { version = "0.3.1", optional = true }
-rand_core = "0.6.4"
-reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev = "311baf8865f6e21527d1f20750d8f2cf5c9e531a", features = ["frost", "frost-rerandomized"] }
-siphasher = { version = "1.0.0", features =["serde_no_std"] }
-x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets"] }
+rand_core = { version = "0.6.4", default-features = false, features = ["alloc"] }
+reddsa = { path = "../reddsa", default-features = false, features = ["frost", "alloc"]}
+frost-core = { git = "https://github.com/ZcashFoundation/frost.git", package = "frost-core", default-features = false, features = ["serialization", "serde", "cheater-detection"] }
+frost-rerandomized = { git = "https://github.com/ZcashFoundation/frost.git", package = "frost-rerandomized", default-features = false  }
+siphasher = { version = "1.0.0", default-features = false }
+x25519-dalek = { version = "2.0.0", default-features = false, features = ["reusable_secrets", "static_secrets"] }
 
 [dev-dependencies]
 hex-literal = "0.4.1"
 rand = "0.8.5"
 
 [features]
-default = ["signing"]
+default = ["dkg"]
 
 std = []
 signing = ["dep:blake3", "dep:rand_chacha", "std"]
