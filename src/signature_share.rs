@@ -6,7 +6,10 @@ use std::io;
 
 use reddsa::frost::redjubjub::round2::SignatureShare as FrostSignatureShare;
 
-use crate::participant::{Identity, IDENTITY_LEN};
+use crate::{
+    error::IronfishFrostError,
+    participant::{Identity, IDENTITY_LEN},
+};
 
 const FROST_SIGNATURE_SHARE_LEN: usize = 32;
 pub const SIGNATURE_SHARE_SERIALIZATION_LEN: usize = IDENTITY_LEN + FROST_SIGNATURE_SHARE_LEN;
@@ -50,13 +53,12 @@ impl SignatureShare {
         writer.write_all(&signature_share_bytes)
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let identity = Identity::deserialize_from(&mut reader)?;
 
         let mut signature_share_bytes = [0u8; FROST_SIGNATURE_SHARE_LEN];
         reader.read_exact(&mut signature_share_bytes)?;
-        let frost_signature_share =
-            FrostSignatureShare::deserialize(signature_share_bytes).map_err(io::Error::other)?;
+        let frost_signature_share = FrostSignatureShare::deserialize(&signature_share_bytes[..])?;
 
         Ok(SignatureShare {
             identity,

@@ -3,12 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::checksum::ChecksumError;
-use crate::dkg::error::Error;
 use crate::dkg::group_key::GroupSecretKey;
 use crate::dkg::group_key::GroupSecretKeyShard;
 use crate::dkg::round1;
 use crate::dkg::round2;
 use crate::dkg::round2::import_secret_package;
+use crate::error::IronfishFrostError;
 use crate::frost::keys::dkg::part3;
 use crate::frost::keys::KeyPackage;
 use crate::frost::keys::PublicKeyPackage as FrostPublicKeyPackage;
@@ -83,11 +83,8 @@ impl PublicKeyPackage {
         bytes
     }
 
-    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
-        let frost_public_key_package = self
-            .frost_public_key_package
-            .serialize()
-            .map_err(io::Error::other)?;
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
+        let frost_public_key_package = self.frost_public_key_package.serialize()?;
         write_variable_length_bytes(&mut writer, &frost_public_key_package)?;
         write_variable_length(&mut writer, &self.identities, |writer, identity| {
             identity.serialize_into(writer)
@@ -97,11 +94,10 @@ impl PublicKeyPackage {
         Ok(())
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let frost_public_key_package = read_variable_length_bytes(&mut reader)?;
         let frost_public_key_package =
-            FrostPublicKeyPackage::deserialize(&frost_public_key_package)
-                .map_err(io::Error::other)?;
+            FrostPublicKeyPackage::deserialize(&frost_public_key_package)?;
         let identities =
             read_variable_length(&mut reader, |reader| Identity::deserialize_from(reader))?;
         let min_signers = read_u16(&mut reader)?;
@@ -119,14 +115,13 @@ pub fn round3<'a, P, Q>(
     round2_secret_package: &[u8],
     round1_public_packages: P,
     round2_public_packages: Q,
-) -> Result<(KeyPackage, PublicKeyPackage, GroupSecretKey), Error>
+) -> Result<(KeyPackage, PublicKeyPackage, GroupSecretKey), IronfishFrostError>
 where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     Q: IntoIterator<Item = &'a round2::CombinedPublicPackage>,
 {
     let identity = secret.to_identity();
-    let round2_secret_package =
-        import_secret_package(round2_secret_package, secret).map_err(Error::DecryptionError)?;
+    let round2_secret_package = import_secret_package(round2_secret_package, secret)?;
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
     let round2_public_packages = round2_public_packages
         .into_iter()
@@ -138,20 +133,12 @@ where
     // Ensure that the number of public packages provided matches max_signers
     let expected_round1_packages = max_signers as usize;
     if round1_public_packages.len() != expected_round1_packages {
-        return Err(Error::InvalidInput(format!(
-            "expected {} round 1 public packages, got {}",
-            expected_round1_packages,
-            round1_public_packages.len()
-        )));
+        return Err(IronfishFrostError::InvalidInput);
     }
 
     let expected_round2_packages = expected_round1_packages.saturating_sub(1);
     if round2_public_packages.len() != expected_round2_packages {
-        return Err(Error::InvalidInput(format!(
-            "expected {} round 2 public packages, got {}",
-            expected_round2_packages,
-            round2_public_packages.len()
-        )));
+        return Err(IronfishFrostError::InvalidInput);
     }
 
     let expected_round1_checksum = round1::input_checksum(
@@ -165,7 +152,9 @@ where
 
     for public_package in round1_public_packages.iter() {
         if public_package.checksum() != expected_round1_checksum {
-            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
+            return Err(IronfishFrostError::ChecksumError(
+                ChecksumError::DkgPublicPackageError,
+            ));
         }
 
         let identity = public_package.identity();
@@ -176,15 +165,10 @@ where
             .insert(frost_identifier, frost_package)
             .is_some()
         {
-            return Err(Error::InvalidInput(format!(
-                "multiple round 1 public packages provided for identity {}",
-                public_package.identity()
-            )));
+            return Err(IronfishFrostError::InvalidInput);
         }
 
-        let gsk_shard = public_package
-            .group_secret_key_shard(secret)
-            .map_err(Error::DecryptionError)?;
+        let gsk_shard = public_package.group_secret_key_shard(secret)?;
         gsk_shards.push(gsk_shard);
         identities.push(identity.clone());
     }
@@ -196,9 +180,7 @@ where
     // inputs
     round1_frost_packages
         .remove(&identity.to_frost_identifier())
-        .ok_or_else(|| {
-            Error::InvalidInput("missing round 1 public package for own identity".to_string())
-        })?;
+        .ok_or_else(|| IronfishFrostError::InvalidInput)?;
 
     let expected_round2_checksum =
         round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
@@ -206,14 +188,13 @@ where
     let mut round2_frost_packages = BTreeMap::new();
     for public_package in round2_public_packages.iter() {
         if public_package.checksum() != expected_round2_checksum {
-            return Err(Error::ChecksumError(ChecksumError::DkgPublicPackageError));
+            return Err(IronfishFrostError::ChecksumError(
+                ChecksumError::DkgPublicPackageError,
+            ));
         }
 
         if !identity.eq(public_package.recipient_identity()) {
-            return Err(Error::InvalidInput(format!(
-                "round 2 public package does not have the correct recipient identity {:?}",
-                public_package.recipient_identity().serialize()
-            )));
+            return Err(IronfishFrostError::InvalidInput);
         }
 
         let frost_identifier = public_package.sender_identity().to_frost_identifier();
@@ -223,10 +204,7 @@ where
             .insert(frost_identifier, frost_package)
             .is_some()
         {
-            return Err(Error::InvalidInput(format!(
-                "multiple round 2 public packages provided for identity {}",
-                public_package.sender_identity()
-            )));
+            return Err(IronfishFrostError::InvalidInput);
         }
     }
 
@@ -236,8 +214,7 @@ where
         &round2_secret_package,
         &round1_frost_packages,
         &round2_frost_packages,
-    )
-    .map_err(Error::FrostError)?;
+    )?;
 
     let public_key_package =
         PublicKeyPackage::from_frost(public_key_package, identities, min_signers);
@@ -253,9 +230,9 @@ where
 mod tests {
     use super::round3;
     use super::PublicKeyPackage;
-    use crate::dkg::error::Error;
     use crate::dkg::round1;
     use crate::dkg::round2;
+    use crate::error::IronfishFrostError;
     use crate::participant::Secret;
     use hex_literal::hex;
     use rand::thread_rng;
@@ -356,7 +333,7 @@ mod tests {
         );
 
         match result {
-            Err(Error::InvalidInput(_)) => (),
+            Err(IronfishFrostError::InvalidInput) => (),
             _ => panic!("dkg round3 should have failed with InvalidInput"),
         }
     }
@@ -400,7 +377,7 @@ mod tests {
         );
 
         match result {
-            Err(Error::ChecksumError(_)) => (),
+            Err(IronfishFrostError::ChecksumError(_)) => (),
             _ => panic!("dkg round3 should have failed with ChecksumError"),
         }
     }
