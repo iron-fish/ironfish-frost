@@ -5,8 +5,8 @@
 use crate::checksum::Checksum;
 use crate::checksum::ChecksumHasher;
 use crate::checksum::CHECKSUM_LEN;
-use crate::dkg::error::Error;
 use crate::dkg::group_key::GroupSecretKeyShard;
+use crate::error::IronfishFrostError;
 use crate::frost;
 use crate::frost::keys::dkg::round1::Package;
 use crate::frost::keys::dkg::round1::SecretPackage;
@@ -15,7 +15,6 @@ use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
 use crate::multienc;
-use crate::multienc::read_encrypted_blob;
 use crate::participant;
 use crate::participant::Identity;
 use crate::serde::read_u16;
@@ -80,12 +79,13 @@ impl<'a> From<&'a SerializableSecretPackage> for &'a SecretPackage {
 }
 
 impl SerializableSecretPackage {
-    fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         writer.write_all(&self.identifier.serialize())?;
         write_variable_length(&mut writer, &self.coefficients, |writer, scalar| {
             writer.write_all(&scalar.to_bytes())
         })?;
-        write_variable_length(&mut writer, self.commitment.serialize(), |writer, array| {
+        let serialized = self.commitment.serialize()?;
+        write_variable_length(&mut writer, serialized, |writer, array| {
             writer.write_all(&array)
         })?;
         write_u16(&mut writer, self.min_signers)?;
@@ -93,10 +93,10 @@ impl SerializableSecretPackage {
         Ok(())
     }
 
-    fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let mut identifier = [0u8; 32];
         reader.read_exact(&mut identifier)?;
-        let identifier = Identifier::deserialize(&identifier).map_err(io::Error::other)?;
+        let identifier = Identifier::deserialize(&identifier)?;
 
         let coefficients = read_variable_length(&mut reader, |reader| {
             let mut scalar = [0u8; 32];
@@ -112,8 +112,7 @@ impl SerializableSecretPackage {
                 reader.read_exact(&mut array)?;
                 Ok(array)
             },
-        )?)
-        .map_err(io::Error::other)?;
+        )?)?;
 
         let min_signers = read_u16(&mut reader)?;
         let max_signers = read_u16(&mut reader)?;
@@ -153,8 +152,8 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
 pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
-) -> io::Result<SecretPackage> {
-    let serialized = multienc::decrypt(secret, &exported).map_err(io::Error::other)?;
+) -> Result<SecretPackage, IronfishFrostError> {
+    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
@@ -247,22 +246,22 @@ impl PublicPackage {
         buf
     }
 
-    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
+    pub fn serialize_into<W: io::Write>(&self, mut writer: W) -> Result<(), IronfishFrostError> {
         self.identity.serialize_into(&mut writer)?;
-        let frost_package = self.frost_package.serialize().map_err(io::Error::other)?;
+        let frost_package = self.frost_package.serialize()?;
         write_variable_length_bytes(&mut writer, &frost_package)?;
-        writer.write_all(&self.group_secret_key_shard_encrypted[..])?;
+        write_variable_length_bytes(&mut writer, &self.group_secret_key_shard_encrypted)?;
         writer.write_all(&self.checksum.to_le_bytes())?;
         Ok(())
     }
 
-    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
         let identity = Identity::deserialize_from(&mut reader).expect("reading identity failed");
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
-        let frost_package = Package::deserialize(&frost_package).map_err(io::Error::other)?;
+        let frost_package = Package::deserialize(&frost_package)?;
 
-        let group_secret_key_shard_encrypted = read_encrypted_blob(&mut reader)?;
+        let group_secret_key_shard_encrypted = read_variable_length_bytes(&mut reader)?;
 
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
@@ -282,7 +281,7 @@ pub fn round1<'a, I, R>(
     min_signers: u16,
     participants: I,
     mut csrng: R,
-) -> Result<(Vec<u8>, PublicPackage), Error>
+) -> Result<(Vec<u8>, PublicPackage), IronfishFrostError>
 where
     I: IntoIterator<Item = &'a Identity>,
     R: RngCore + CryptoRng,
@@ -294,25 +293,21 @@ where
     let participants = participants;
 
     if !participants.contains(&self_identity) {
-        return Err(Error::InvalidInput(
-            "participants must include self_identity".to_string(),
-        ));
+        return Err(IronfishFrostError::InvalidInput);
     }
 
-    let max_signers = u16::try_from(participants.len())
-        .map_err(|_| Error::InvalidInput("too many participants".to_string()))?;
+    let max_signers =
+        u16::try_from(participants.len()).map_err(|_| IronfishFrostError::InvalidInput)?;
 
     let (secret_package, public_package) = frost::keys::dkg::part1(
         self_identity.to_frost_identifier(),
         max_signers,
         min_signers,
         &mut csrng,
-    )
-    .map_err(Error::FrostError)?;
+    )?;
 
     let encrypted_secret_package =
-        export_secret_package(&secret_package, self_identity, &mut csrng)
-            .map_err(Error::EncryptionError)?;
+        export_secret_package(&secret_package, self_identity, &mut csrng)?;
 
     let group_secret_key_shard = GroupSecretKeyShard::random(&mut csrng);
 
@@ -492,6 +487,13 @@ mod tests {
         let deserialized = PublicPackage::deserialize_from(&serialized[..])
             .expect("package deserialization failed");
 
+        assert_eq!(public_package.identity, deserialized.identity);
+        assert_eq!(public_package.checksum, deserialized.checksum);
+        assert_eq!(public_package.frost_package, deserialized.frost_package);
+        assert_eq!(
+            public_package.group_secret_key_shard_encrypted,
+            deserialized.group_secret_key_shard_encrypted
+        );
         assert_eq!(public_package, deserialized);
     }
 
