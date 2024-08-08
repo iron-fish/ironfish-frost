@@ -15,7 +15,7 @@ chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.0", features = ["rand_core", "alloc"], default-features = false }
 rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 rand_core = { version = "0.6.4", features = ["alloc"], default-features = false }
-reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev = "98e48b4953b2cf98bea96107bbde800534e98d28",  features = ["frost"], default-features = false }
+reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev = "9ac52c5c60e454b0032d78a22c05fb79aae1d51e",  features = ["frost"], default-features = false }
 frost-core = { git = "https://github.com/ZcashFoundation/frost.git", rev = "c6c3f2f", package = "frost-core", features = ["serialization", "serde", "cheater-detection"], default-features = false }
 siphasher = { version = "1.0.0", default-features = false }
 x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets", "getrandom"], default-features = false }
@@ -30,6 +30,3 @@ default = ["dkg","signing"]
 std = []
 signing = ["dep:blake3", "dep:rand_chacha", "std"]
 dkg = []
-
-[patch.crates-io]
-frost-rerandomized = { git = "https://github.com/ZcashFoundation/frost.git", rev = "c6c3f2f", package = "frost-rerandomized", features = ["serialization", "cheater-detection"], default-features = false }
