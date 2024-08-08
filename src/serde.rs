@@ -6,6 +6,11 @@
 
 use crate::io;
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 #[inline]
 #[cfg(feature = "dkg")]
 pub(crate) fn write_u16<W: io::Write>(mut writer: W, value: u16) -> io::Result<()> {

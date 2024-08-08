@@ -236,8 +236,8 @@ impl Identity {
 
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
-        let verification_key =
-            VerifyingKey::from_bytes(&verification_key).map_err(io::Error::other)?;
+        let verification_key = VerifyingKey::from_bytes(&verification_key)
+            .map_err(|_| io::Error::other("verifying key deserialization failed"))?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -247,7 +247,8 @@ impl Identity {
         reader.read_exact(&mut signature)?;
         let signature = Signature::from(signature);
 
-        Self::new(verification_key, encryption_key, signature).map_err(io::Error::other)
+        Self::new(verification_key, encryption_key, signature)
+            .map_err(|_| io::Error::other("identity deserialization failed"))
     }
 
     pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {

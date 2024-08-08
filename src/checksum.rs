@@ -2,16 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::error;
-use std::fmt;
+use core::fmt;
 
 use siphasher::sip::SipHasher24;
+pub(crate) type ChecksumHasher = SipHasher24;
 
 pub(crate) const CHECKSUM_LEN: usize = 8;
 
 pub(crate) type Checksum = u64;
-
-pub(crate) type ChecksumHasher = SipHasher24;
 
 #[derive(Clone, Debug)]
 pub enum ChecksumError {
@@ -33,4 +31,7 @@ impl fmt::Display for ChecksumError {
     }
 }
 
+#[cfg(feature = "std")]
+use std::error;
+#[cfg(feature = "std")]
 impl error::Error for ChecksumError {}

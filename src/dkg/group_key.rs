@@ -2,12 +2,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use crate::io;
 use crate::multienc;
 use crate::participant::Identity;
 use crate::participant::Secret;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::io;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 pub const GROUP_SECRET_KEY_LEN: usize = 32;
 
