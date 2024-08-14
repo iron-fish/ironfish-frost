@@ -8,10 +8,11 @@ use core::cell::OnceCell;
 use core::cmp;
 use core::hash::Hash;
 use core::hash::Hasher;
-use ed25519_dalek::Signer;
+use ed25519_dalek::{Signer, SECRET_KEY_LENGTH};
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
 use ed25519_dalek::VerifyingKey;
+use ed25519_dalek::SecretKey;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
 use x25519_dalek::PublicKey;
@@ -76,6 +77,15 @@ impl Secret {
         Self {
             signing_key: SigningKey::generate(&mut csprng),
             decryption_key: StaticSecret::random_from_rng(&mut csprng),
+            identity: OnceCell::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn from_secret_keys(secret_key_1: &SecretKey, secret_key_2: &SecretKey) -> Self {
+        Self {
+            signing_key: SigningKey::from_bytes(secret_key_1),
+            decryption_key: StaticSecret::from(*secret_key_2),
             identity: OnceCell::new(),
         }
     }
