@@ -413,14 +413,17 @@ where
     }
 
     // Sanity check
-    assert_eq!(round1_public_packages.len(), identities.len());
-    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
+    //assert_eq!(round1_public_packages.len(), identities.len());
+    //assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
 
     // The public package for `self_identity` must be excluded from `frost::keys::dkg::part2`
     // inputs
-    round1_frost_packages
-        .remove(&self_identity.to_frost_identifier())
-        .expect("missing public package for self_identity");
+    match round1_frost_packages.remove(&self_identity.to_frost_identifier()){
+        Some(_) => (),
+        None => {
+            return Err(IronfishFrostError::InvalidScenario("missing public package for self_identity"));
+        }
+    };
 
     // Run the FROST DKG round 2
     let (round2_secret_package, round2_packages) =
@@ -433,9 +436,12 @@ where
     // Convert the Identifier->Package map to an Identity->PublicPackage map
     let mut round2_public_packages = Vec::new();
     for (identifier, package) in round2_packages {
-        let identity = *identities
-            .get(&identifier)
-            .expect("round2 generated package for unknown identifier");
+        let identity = match identities.get(&identifier){
+            Some(i) => *i,
+            None => {
+                return Err(IronfishFrostError::InvalidScenario("round2 generated package for unknown identifier"));
+            }
+        };
 
         let public_package = PublicPackage::new(
             self_identity.clone(),

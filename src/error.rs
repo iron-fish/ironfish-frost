@@ -17,6 +17,7 @@ pub enum IronfishFrostError {
     FrostError(FrostError<JubjubBlake2b512>),
     SignatureError(ed25519_dalek::SignatureError),
     ChecksumError(ChecksumError),
+    InvalidScenario(&'static str),
 }
 
 impl From<FrostError<JubjubBlake2b512>> for IronfishFrostError {
