@@ -43,6 +43,7 @@ use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use crate::dkg::utils::{z_check_app_canary, zlog_stack};
+use crate::error::IronfishFrostError::InvalidScenario;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -372,11 +373,16 @@ where
     zlog_stack("in round2\0");
 
     let self_identity = secret.to_identity();
+    z_check_app_canary();
+
     let round1_secret_package = round1::import_secret_package(round1_secret_package, secret)?;
+    z_check_app_canary();
 
     let (min_signers, max_signers) = round1::get_secret_package_signers(&round1_secret_package);
+    z_check_app_canary();
 
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
+    z_check_app_canary();
 
     if round1_public_packages.len() != max_signers as usize {
         return Err(IronfishFrostError::InvalidInput);
@@ -386,38 +392,32 @@ where
         min_signers,
         round1_public_packages.iter().map(|pkg| pkg.identity()),
     );
-
-
     z_check_app_canary();
-    zlog_stack("in round2\0");
 
     let (identities, round1_frost_packages) = process_public_packages(
         &round1_public_packages,
         expected_round1_checksum,
     )?;
-
     z_check_app_canary();
-    zlog_stack("in round2\0");
-
-    assert_eq!(round1_public_packages.len(), identities.len());
-    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
 
     let mut round1_frost_packages = round1_frost_packages;
-    round1_frost_packages
-        .remove(&self_identity.to_frost_identifier())
-        .expect("missing public package for self_identity");
 
+    match round1_frost_packages
+        .remove(&self_identity.to_frost_identifier()){
+        Some(_) => (),
+        None => {
+            return Err(InvalidScenario("missing public package for self_identity"));
+        }
+    };
     z_check_app_canary();
-    zlog_stack("input_checksum\0");
 
     let (round2_secret_package, round2_packages) =
         frost::keys::dkg::part2(round1_secret_package.clone(), &round1_frost_packages)?;
+    z_check_app_canary();
 
     let encrypted_secret_package =
         export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
-
     z_check_app_canary();
-    zlog_stack("input_checksum\0");
 
     let round2_public_packages = create_round2_public_packages(
         &identities,
@@ -425,9 +425,7 @@ where
         round2_packages,
         &self_identity,
     )?;
-
     z_check_app_canary();
-    zlog_stack("input_checksum\0");
 
     Ok((
         encrypted_secret_package,
@@ -439,6 +437,8 @@ fn process_public_packages<'a>(
     round1_public_packages: &[&'a round1::PublicPackage],
     expected_round1_checksum: Checksum,
 ) -> Result<(BTreeMap<Identifier, &'a Identity>, BTreeMap<Identifier, Round1Package>), IronfishFrostError> {
+    zlog_stack("in process_public_packages\0");
+
     let mut identities = BTreeMap::new();
     let mut round1_frost_packages = BTreeMap::new();
 
@@ -478,12 +478,17 @@ fn create_round2_public_packages(
     round2_packages: BTreeMap<Identifier, Package>,
     self_identity: &Identity,
 ) -> Result<Vec<PublicPackage>, IronfishFrostError> {
+    zlog_stack("in create_round2_public_packages\0");
+
     let mut round2_public_packages = Vec::new();
 
     for (identifier, package) in round2_packages {
-        let identity = identities
-            .get(&identifier)
-            .expect("round2 generated package for unknown identifier");
+        let identity = match identities.get(&identifier){
+            None => {
+                return Err(InvalidScenario("round2 generated package for unknown identifier"));
+            },
+            Some(i) => *i
+        };
 
         let public_package = PublicPackage::new(
             self_identity.clone(),
