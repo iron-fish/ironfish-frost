@@ -42,6 +42,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use crate::dkg::utils::{z_check_app_canary, zlog_stack};
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -367,15 +368,16 @@ where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     R: RngCore + CryptoRng,
 {
+    z_check_app_canary();
+    zlog_stack("in round2\0");
+
     let self_identity = secret.to_identity();
     let round1_secret_package = round1::import_secret_package(round1_secret_package, secret)?;
 
-    // Extract the min/max signers from the secret package
     let (min_signers, max_signers) = round1::get_secret_package_signers(&round1_secret_package);
 
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
 
-    // Ensure that the number of public packages provided matches max_signers
     if round1_public_packages.len() != max_signers as usize {
         return Err(IronfishFrostError::InvalidInput);
     }
@@ -385,9 +387,62 @@ where
         round1_public_packages.iter().map(|pkg| pkg.identity()),
     );
 
+
+    z_check_app_canary();
+    zlog_stack("in round2\0");
+
+    let (identities, round1_frost_packages) = process_public_packages(
+        &round1_public_packages,
+        expected_round1_checksum,
+    )?;
+
+    z_check_app_canary();
+    zlog_stack("in round2\0");
+
+    assert_eq!(round1_public_packages.len(), identities.len());
+    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
+
+    let mut round1_frost_packages = round1_frost_packages;
+    round1_frost_packages
+        .remove(&self_identity.to_frost_identifier())
+        .expect("missing public package for self_identity");
+
+    z_check_app_canary();
+    zlog_stack("input_checksum\0");
+
+    let (round2_secret_package, round2_packages) =
+        frost::keys::dkg::part2(round1_secret_package.clone(), &round1_frost_packages)?;
+
+    let encrypted_secret_package =
+        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
+
+    z_check_app_canary();
+    zlog_stack("input_checksum\0");
+
+    let round2_public_packages = create_round2_public_packages(
+        &identities,
+        &round1_public_packages,
+        round2_packages,
+        &self_identity,
+    )?;
+
+    z_check_app_canary();
+    zlog_stack("input_checksum\0");
+
+    Ok((
+        encrypted_secret_package,
+        CombinedPublicPackage::new(round2_public_packages),
+    ))
+}
+
+fn process_public_packages<'a>(
+    round1_public_packages: &[&'a round1::PublicPackage],
+    expected_round1_checksum: Checksum,
+) -> Result<(BTreeMap<Identifier, &'a Identity>, BTreeMap<Identifier, Round1Package>), IronfishFrostError> {
     let mut identities = BTreeMap::new();
-    let mut round1_frost_packages: BTreeMap<Identifier, Round1Package> = BTreeMap::new();
-    for public_package in round1_public_packages.clone() {
+    let mut round1_frost_packages = BTreeMap::new();
+
+    for public_package in round1_public_packages {
         if public_package.checksum() != expected_round1_checksum {
             return Err(IronfishFrostError::ChecksumError(
                 ChecksumError::DkgPublicPackageError,
@@ -398,6 +453,9 @@ where
         let frost_identifier = identity.to_frost_identifier();
         let frost_package = public_package.frost_package().clone();
 
+        z_check_app_canary();
+        zlog_stack("in round2\0");
+
         if round1_frost_packages
             .insert(frost_identifier, frost_package)
             .is_some()
@@ -405,58 +463,39 @@ where
             return Err(IronfishFrostError::InvalidInput);
         }
 
+        z_check_app_canary();
+        zlog_stack("input_checksum");
+
         identities.insert(frost_identifier, identity);
-        round1_frost_packages.insert(
-            public_package.identity().to_frost_identifier(),
-            public_package.frost_package().clone(),
-        );
     }
 
-    // Sanity check
-    //assert_eq!(round1_public_packages.len(), identities.len());
-    //assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
+    Ok((identities, round1_frost_packages))
+}
 
-    // The public package for `self_identity` must be excluded from `frost::keys::dkg::part2`
-    // inputs
-    match round1_frost_packages.remove(&self_identity.to_frost_identifier()){
-        Some(_) => (),
-        None => {
-            return Err(IronfishFrostError::InvalidScenario("missing public package for self_identity"));
-        }
-    };
-
-    // Run the FROST DKG round 2
-    let (round2_secret_package, round2_packages) =
-        frost::keys::dkg::part2(round1_secret_package.clone(), &round1_frost_packages)?;
-
-    // Encrypt the secret package
-    let encrypted_secret_package =
-        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
-
-    // Convert the Identifier->Package map to an Identity->PublicPackage map
+fn create_round2_public_packages(
+    identities: &BTreeMap<Identifier, &Identity>,
+    round1_public_packages: &[&round1::PublicPackage],
+    round2_packages: BTreeMap<Identifier, Package>,
+    self_identity: &Identity,
+) -> Result<Vec<PublicPackage>, IronfishFrostError> {
     let mut round2_public_packages = Vec::new();
+
     for (identifier, package) in round2_packages {
-        let identity = match identities.get(&identifier){
-            Some(i) => *i,
-            None => {
-                return Err(IronfishFrostError::InvalidScenario("round2 generated package for unknown identifier"));
-            }
-        };
+        let identity = identities
+            .get(&identifier)
+            .expect("round2 generated package for unknown identifier");
 
         let public_package = PublicPackage::new(
             self_identity.clone(),
-            identity.clone(),
-            &round1_public_packages[..],
+            (*identity).clone(),
+            round1_public_packages,
             package,
         );
 
         round2_public_packages.push(public_package);
     }
 
-    Ok((
-        encrypted_secret_package,
-        CombinedPublicPackage::new(round2_public_packages),
-    ))
+    Ok(round2_public_packages)
 }
 
 #[cfg(test)]
