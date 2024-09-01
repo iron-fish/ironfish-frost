@@ -33,6 +33,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use crate::dkg::utils::{z_check_app_canary, zlog_stack};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyPackage {
@@ -121,6 +122,9 @@ where
     P: IntoIterator<Item = &'a round1::PublicPackage>,
     Q: IntoIterator<Item = &'a round2::CombinedPublicPackage>,
 {
+    z_check_app_canary();
+    zlog_stack("start round3\0");
+
     let identity = secret.to_identity();
     let round2_secret_package = import_secret_package(round2_secret_package, secret)?;
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();

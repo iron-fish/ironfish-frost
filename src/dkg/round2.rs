@@ -370,7 +370,7 @@ where
     R: RngCore + CryptoRng,
 {
     z_check_app_canary();
-    zlog_stack("in round2\0");
+    zlog_stack("start round2\0");
 
     let self_identity = secret.to_identity();
     z_check_app_canary();
@@ -437,7 +437,7 @@ fn process_public_packages<'a>(
     round1_public_packages: &[&'a round1::PublicPackage],
     expected_round1_checksum: Checksum,
 ) -> Result<(BTreeMap<Identifier, &'a Identity>, BTreeMap<Identifier, Round1Package>), IronfishFrostError> {
-    zlog_stack("in process_public_packages\0");
+    zlog_stack("start process_public_packages\0");
 
     let mut identities = BTreeMap::new();
     let mut round1_frost_packages = BTreeMap::new();
@@ -453,18 +453,12 @@ fn process_public_packages<'a>(
         let frost_identifier = identity.to_frost_identifier();
         let frost_package = public_package.frost_package().clone();
 
-        z_check_app_canary();
-        zlog_stack("in round2\0");
-
         if round1_frost_packages
             .insert(frost_identifier, frost_package)
             .is_some()
         {
             return Err(IronfishFrostError::InvalidInput);
         }
-
-        z_check_app_canary();
-        zlog_stack("input_checksum");
 
         identities.insert(frost_identifier, identity);
     }
@@ -478,7 +472,7 @@ fn create_round2_public_packages(
     round2_packages: BTreeMap<Identifier, Package>,
     self_identity: &Identity,
 ) -> Result<Vec<PublicPackage>, IronfishFrostError> {
-    zlog_stack("in create_round2_public_packages\0");
+    zlog_stack("start create_round2_public_packages\0");
 
     let mut round2_public_packages = Vec::new();
 

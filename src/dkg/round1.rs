@@ -36,6 +36,7 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use crate::dkg::utils::{z_check_app_canary, zlog_stack};
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -293,6 +294,9 @@ where
     I: IntoIterator<Item = &'a Identity>,
     R: RngCore + CryptoRng,
 {
+    z_check_app_canary();
+    zlog_stack("start round1\0");
+
     // Remove duplicates from `participants` to ensure that `max_signers` is calculated correctly.
     let mut participants = participants.into_iter().collect::<Vec<_>>();
     participants.sort_unstable();
