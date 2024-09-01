@@ -359,6 +359,7 @@ impl IntoIterator for CombinedPublicPackage {
     }
 }
 
+#[inline(never)]
 pub fn round2<'a, P, R>(
     secret: &participant::Secret,
     round1_secret_package: &[u8],
@@ -433,6 +434,7 @@ where
     ))
 }
 
+#[inline(never)]
 fn process_public_packages<'a>(
     round1_public_packages: &[&'a round1::PublicPackage],
     expected_round1_checksum: Checksum,
@@ -466,6 +468,7 @@ fn process_public_packages<'a>(
     Ok((identities, round1_frost_packages))
 }
 
+#[inline(never)]
 fn create_round2_public_packages(
     identities: &BTreeMap<Identifier, &Identity>,
     round1_public_packages: &[&round1::PublicPackage],
