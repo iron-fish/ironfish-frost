@@ -135,6 +135,7 @@ impl SerializableSecretPackage {
     }
 }
 
+#[inline(never)]
 pub(super) fn get_secret_package_signers(pkg: &SecretPackage) -> (u16, u16) {
     let serializable = <&SerializableSecretPackage>::from(pkg);
     (serializable.min_signers, serializable.max_signers)
@@ -157,6 +158,7 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
     Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
 
+#[inline(never)]
 pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
@@ -165,6 +167,7 @@ pub fn import_secret_package(
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
+#[inline(never)]
 #[must_use]
 pub(super) fn input_checksum<'a, I>(min_signers: u16, participants: I) -> Checksum
 where

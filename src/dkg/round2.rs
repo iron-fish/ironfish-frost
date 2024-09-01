@@ -144,6 +144,7 @@ pub(super) fn get_secret_package_signers(pkg: &SecretPackage) -> (u16, u16) {
     (serializable.min_signers, serializable.max_signers)
 }
 
+#[inline(never)]
 pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
