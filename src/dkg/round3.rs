@@ -150,6 +150,7 @@ where
         min_signers,
         round1_public_packages.iter().map(|pkg| pkg.identity()),
     );
+    zlog_stack("after input_checksum\0");
 
     let mut gsk_shards = Vec::new();
     let mut round1_frost_packages = BTreeMap::new();
@@ -177,6 +178,8 @@ where
         gsk_shards.push(gsk_shard);
         identities.push(identity.clone());
     }
+
+    zlog_stack("round1_public_packages.iter()\0");
 
     // Sanity check
     assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
@@ -213,6 +216,8 @@ where
         }
     }
 
+    zlog_stack("after round2_public_packages.iter()\0");
+
     assert_eq!(round2_public_packages.len(), round2_frost_packages.len());
 
     let (key_package, public_key_package) = part3(
@@ -221,8 +226,12 @@ where
         &round2_frost_packages,
     )?;
 
+    zlog_stack("after part3\0");
+
     let public_key_package =
         PublicKeyPackage::from_frost(public_key_package, identities, min_signers);
+
+    zlog_stack("after public_key_package\0");
 
     Ok((
         key_package,
