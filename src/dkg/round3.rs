@@ -158,9 +158,9 @@ where
     );
     zlog_stack("after input_checksum\0");
 
-    let mut gsk_shards = Vec::new();
+    let mut gsk_shards = Vec::with_capacity(round1_public_packages.len());
     let mut round1_frost_packages = BTreeMap::new();
-    let mut identities = Vec::new();
+    let mut identities = Vec::with_capacity(round1_public_packages.len());
 
     for public_package in round1_public_packages.iter() {
         if public_package.checksum() != expected_round1_checksum {
