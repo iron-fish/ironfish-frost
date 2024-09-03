@@ -126,14 +126,19 @@ where
     zlog_stack("start round3\0");
 
     let identity = secret.to_identity();
+    zlog_stack("round3 1\0");
     let round2_secret_package = import_secret_package(round2_secret_package, secret)?;
+    zlog_stack("round3 2\0");
     let round1_public_packages = round1_public_packages.into_iter().collect::<Vec<_>>();
+    zlog_stack("round3 3\0");
     let round2_public_packages = round2_public_packages
         .into_iter()
         .flat_map(|combo| combo.packages_for(&identity))
         .collect::<Vec<_>>();
+    zlog_stack("round3 4\0");
 
     let (min_signers, max_signers) = round2::get_secret_package_signers(&round2_secret_package);
+    zlog_stack("round3 5\0");
 
     // Ensure that the number of public packages provided matches max_signers
     let expected_round1_packages = max_signers as usize;
@@ -145,6 +150,7 @@ where
     if round2_public_packages.len() != expected_round2_packages {
         return Err(IronfishFrostError::InvalidInput);
     }
+    zlog_stack("round3 6\0");
 
     let expected_round1_checksum = round1::input_checksum(
         min_signers,
@@ -189,9 +195,11 @@ where
     round1_frost_packages
         .remove(&identity.to_frost_identifier())
         .ok_or(IronfishFrostError::InvalidInput)?;
+    zlog_stack("round3 7\0");
 
     let expected_round2_checksum =
         round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
+    zlog_stack("round3 8\0");
 
     let mut round2_frost_packages = BTreeMap::new();
     for public_package in round2_public_packages.iter() {
