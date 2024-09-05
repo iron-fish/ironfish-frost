@@ -320,6 +320,13 @@ impl CombinedPublicPackage {
             .filter(move |pkg| &pkg.recipient_identity == recipient_identity)
     }
 
+    #[inline]
+    pub fn package_for<'a>(&'a self, recipient_identity: &'a Identity) -> Option<&PublicPackage> {
+        self.packages
+            .iter()
+            .find(move |pkg| &pkg.recipient_identity == recipient_identity)
+    }
+
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         self.serialize_into(&mut buf).expect("serialization failed");
