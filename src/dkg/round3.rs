@@ -611,11 +611,9 @@ mod tests {
         )
         .expect("round 2 failed");
 
-        let mut participants = Vec::with_capacity(2);
         let id2_ser: &[u8] = &identity2.serialize();
         let id3_ser: &[u8] = &identity3.serialize();
-        participants.push(id2_ser);
-        participants.push(id3_ser);
+        let participants = vec![id2_ser, id3_ser];
 
         let pkg2_ser = package2
             .frost_package()
@@ -626,9 +624,7 @@ mod tests {
             .serialize()
             .expect("serialization failed");
 
-        let mut round1_frost_packages: Vec<&[u8]> = Vec::with_capacity(2);
-        round1_frost_packages.push(&pkg2_ser[..]);
-        round1_frost_packages.push(&pkg3_ser[..]);
+        let round1_frost_packages: Vec<&[u8]> = vec![&pkg2_ser[..], &pkg3_ser[..]];
 
         let pkg2_2 = round2_public_packages_2
             .package_for(&identity1)
@@ -643,14 +639,13 @@ mod tests {
             .serialize()
             .expect("round2 public package serialization failed");
 
-        let mut round2_frost_packages: Vec<&[u8]> = Vec::with_capacity(2);
-        round2_frost_packages.push(&pkg2_2[..]);
-        round2_frost_packages.push(&pkg2_3[..]);
+        let round2_frost_packages: Vec<&[u8]> = vec![&pkg2_2[..], &pkg2_3[..]];
 
-        let mut gsk_bytes: Vec<&[u8]> = Vec::with_capacity(3);
-        gsk_bytes.push(package1.group_secret_key_shard_encrypted());
-        gsk_bytes.push(package2.group_secret_key_shard_encrypted());
-        gsk_bytes.push(package3.group_secret_key_shard_encrypted());
+        let gsk_bytes: Vec<&[u8]> = vec![
+            package1.group_secret_key_shard_encrypted(),
+            package2.group_secret_key_shard_encrypted(),
+            package3.group_secret_key_shard_encrypted(),
+        ];
 
         round3_min(
             &secret1,
