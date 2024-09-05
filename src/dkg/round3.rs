@@ -22,6 +22,8 @@ use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
 use core::borrow::Borrow;
+use reddsa::frost::redjubjub::keys::dkg::round1::Package as Round1Package;
+use reddsa::frost::redjubjub::keys::dkg::round2::Package as Round2Package;
 use reddsa::frost::redjubjub::VerifyingKey;
 
 #[cfg(feature = "std")]
@@ -280,14 +282,64 @@ where
     ))
 }
 
+pub fn round3_min(
+    secret: &Secret,
+    participants: Vec<&[u8]>,
+    round2_secret_package: &[u8],
+    round1_frost_packages: Vec<&[u8]>,
+    round2_frost_packages: Vec<&[u8]>,
+    gsk_bytes: Vec<&[u8]>,
+    min_signers: u16,
+) -> Result<(KeyPackage, PublicKeyPackage, GroupSecretKey), IronfishFrostError> {
+    let round2_secret_package = import_secret_package(round2_secret_package, secret)?;
+
+    let mut identities: Vec<Identity> = Vec::with_capacity(participants.len() + 1);
+    identities.push(secret.to_identity());
+
+    let mut round1_packages = BTreeMap::new();
+    let mut round2_packages = BTreeMap::new();
+
+    for i in 0..participants.len() {
+        let identity = Identity::deserialize_from(participants[i])?;
+        identities.push(identity.clone());
+
+        let identifier = identity.to_frost_identifier();
+
+        let round1_package = Round1Package::deserialize(round1_frost_packages[i])?;
+        round1_packages.insert(identifier, round1_package);
+
+        let round2_package = Round2Package::deserialize(round2_frost_packages[i])?;
+        round2_packages.insert(identifier, round2_package);
+    }
+
+    let (key_package, public_key_package) =
+        part3(&round2_secret_package, &round1_packages, &round2_packages)?;
+
+    let public_key_package =
+        PublicKeyPackage::from_frost(public_key_package, identities, min_signers);
+
+    let mut gsk_shards: Vec<GroupSecretKeyShard> = Vec::with_capacity(participants.len() + 1);
+    for g in gsk_bytes {
+        gsk_shards.push(GroupSecretKeyShard::import(secret, g)?);
+    }
+
+    Ok((
+        key_package,
+        public_key_package,
+        GroupSecretKeyShard::combine(&gsk_shards),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::round3;
+    use super::round3_min;
     use super::PublicKeyPackage;
     use crate::dkg::round1;
     use crate::dkg::round2;
     use crate::error::IronfishFrostError;
     use crate::participant::Secret;
+    use alloc::vec::Vec;
     use hex_literal::hex;
     use rand::thread_rng;
     use reddsa::frost::redjubjub::keys::split;
@@ -498,6 +550,116 @@ mod tests {
             &encrypted_secret_package,
             [&package1, &package2, &package3],
             [&round2_public_packages_2, &round2_public_packages_3],
+        )
+        .expect("round 3 failed");
+    }
+
+    #[test]
+    fn test_round3_min() {
+        let secret1 = Secret::random(thread_rng());
+        let secret2 = Secret::random(thread_rng());
+        let secret3 = Secret::random(thread_rng());
+        let identity1 = secret1.to_identity();
+        let identity2 = secret2.to_identity();
+        let identity3 = secret3.to_identity();
+
+        let (round1_secret_package_1, package1) = round1::round1(
+            &identity1,
+            2,
+            [&identity1, &identity2, &identity3],
+            thread_rng(),
+        )
+        .expect("round 1 failed");
+
+        let (round1_secret_package_2, package2) = round1::round1(
+            &identity2,
+            2,
+            [&identity1, &identity2, &identity3],
+            thread_rng(),
+        )
+        .expect("round 1 failed");
+
+        let (round1_secret_package_3, package3) = round1::round1(
+            &identity3,
+            2,
+            [&identity1, &identity2, &identity3],
+            thread_rng(),
+        )
+        .expect("round 1 failed");
+
+        let (encrypted_secret_package, _) = round2::round2(
+            &secret1,
+            &round1_secret_package_1,
+            [&package1, &package2, &package3],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let (_, round2_public_packages_2) = round2::round2(
+            &secret2,
+            &round1_secret_package_2,
+            [&package1, &package2, &package3],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let (_, round2_public_packages_3) = round2::round2(
+            &secret3,
+            &round1_secret_package_3,
+            [&package1, &package2, &package3],
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        let mut participants = Vec::with_capacity(2);
+        let id2_ser: &[u8] = &identity2.serialize();
+        let id3_ser: &[u8] = &identity3.serialize();
+        participants.push(id2_ser);
+        participants.push(id3_ser);
+
+        let pkg2_ser = package2
+            .frost_package()
+            .serialize()
+            .expect("serialization failed");
+        let pkg3_ser = package3
+            .frost_package()
+            .serialize()
+            .expect("serialization failed");
+
+        let mut round1_frost_packages: Vec<&[u8]> = Vec::with_capacity(2);
+        round1_frost_packages.push(&pkg2_ser[..]);
+        round1_frost_packages.push(&pkg3_ser[..]);
+
+        let pkg2_2 = round2_public_packages_2
+            .package_for(&identity1)
+            .expect("missing round2 public package for identity")
+            .frost_package()
+            .serialize()
+            .expect("round2 public package serialization failed");
+        let pkg2_3 = round2_public_packages_3
+            .package_for(&identity1)
+            .expect("missing round2 public package for identity")
+            .frost_package()
+            .serialize()
+            .expect("round2 public package serialization failed");
+
+        let mut round2_frost_packages: Vec<&[u8]> = Vec::with_capacity(2);
+        round2_frost_packages.push(&pkg2_2[..]);
+        round2_frost_packages.push(&pkg2_3[..]);
+
+        let mut gsk_bytes: Vec<&[u8]> = Vec::with_capacity(3);
+        gsk_bytes.push(package1.group_secret_key_shard_encrypted());
+        gsk_bytes.push(package2.group_secret_key_shard_encrypted());
+        gsk_bytes.push(package3.group_secret_key_shard_encrypted());
+
+        round3_min(
+            &secret1,
+            participants,
+            &encrypted_secret_package,
+            round1_frost_packages,
+            round2_frost_packages,
+            gsk_bytes,
+            2,
         )
         .expect("round 3 failed");
     }
