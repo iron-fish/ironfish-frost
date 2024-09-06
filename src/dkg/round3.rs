@@ -339,6 +339,7 @@ mod tests {
     use crate::dkg::round2;
     use crate::error::IronfishFrostError;
     use crate::participant::Secret;
+    extern crate alloc;
     use alloc::vec::Vec;
     use hex_literal::hex;
     use rand::thread_rng;
