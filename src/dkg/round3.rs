@@ -289,19 +289,14 @@ pub fn round3_min(
     round1_frost_packages: Vec<&[u8]>,
     round2_frost_packages: Vec<&[u8]>,
     gsk_bytes: Vec<&[u8]>,
-    min_signers: u16,
-) -> Result<(KeyPackage, PublicKeyPackage, GroupSecretKey), IronfishFrostError> {
+) -> Result<(KeyPackage, FrostPublicKeyPackage, GroupSecretKey), IronfishFrostError> {
     let round2_secret_package = import_secret_package(round2_secret_package, secret)?;
-
-    let mut identities: Vec<Identity> = Vec::with_capacity(participants.len() + 1);
-    identities.push(secret.to_identity());
 
     let mut round1_packages = BTreeMap::new();
     let mut round2_packages = BTreeMap::new();
 
     for i in 0..participants.len() {
         let identity = Identity::deserialize_from(participants[i])?;
-        identities.push(identity.clone());
 
         let identifier = identity.to_frost_identifier();
 
@@ -314,9 +309,6 @@ pub fn round3_min(
 
     let (key_package, public_key_package) =
         part3(&round2_secret_package, &round1_packages, &round2_packages)?;
-
-    let public_key_package =
-        PublicKeyPackage::from_frost(public_key_package, identities, min_signers);
 
     let mut gsk_shards: Vec<GroupSecretKeyShard> = Vec::with_capacity(participants.len() + 1);
     for g in gsk_bytes {
@@ -655,7 +647,6 @@ mod tests {
             round1_frost_packages,
             round2_frost_packages,
             gsk_bytes,
-            2,
         )
         .expect("round 3 failed");
     }
