@@ -263,22 +263,17 @@ impl PublicPackage {
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
-        zlog_stack("!!start deserialize from");
         let identity = Identity::deserialize_from(&mut reader).expect("reading identity failed");
 
-        zlog_stack("!!start frost_package");
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package)?;
 
-        zlog_stack("!!start gsk");
         let group_secret_key_shard_encrypted = read_variable_length_bytes(&mut reader)?;
 
-        zlog_stack("!!start checksum");
         let mut checksum = [0u8; CHECKSUM_LEN];
         reader.read_exact(&mut checksum)?;
         let checksum = u64::from_le_bytes(checksum);
 
-        zlog_stack("!!finish deserialize from");
         Ok(Self {
             identity,
             frost_package,
