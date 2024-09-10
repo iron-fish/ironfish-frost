@@ -9,11 +9,18 @@ use crate::io;
 
 use crate::checksum::ChecksumError;
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
 #[derive(Debug)]
 pub enum IronfishFrostError {
-    InvalidInput,
+    InvalidInput(String),
     StdError,
     IoError(io::Error),
+    DecryptionError(io::Error),
+    EncryptionError(io::Error),
     FrostError(FrostError<JubjubBlake2b512>),
     SignatureError(ed25519_dalek::SignatureError),
     ChecksumError(ChecksumError),
@@ -44,20 +51,28 @@ use std::fmt;
 impl fmt::Display for IronfishFrostError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Self::InvalidInput => {
-                write!(f, "invalid input")?;
-                Ok(())
+            Self::InvalidInput(e) => {
+                write!(f, "invalid input: ")?;
+                e.fmt(f)
             }
             Self::StdError => {
                 write!(f, "std error")?;
                 Ok(())
             }
-            Self::FrostError(e) => {
-                write!(f, "frost error: ")?;
-                e.fmt(f)
-            }
             Self::IoError(e) => {
                 write!(f, "io error: ")?;
+                e.fmt(f)
+            }
+            Self::DecryptionError(e) => {
+                write!(f, "decryption error: ")?;
+                e.fmt(f)
+            }
+            Self::EncryptionError(e) => {
+                write!(f, "encryption error: ")?;
+                e.fmt(f)
+            }
+            Self::FrostError(e) => {
+                write!(f, "frost error: ")?;
                 e.fmt(f)
             }
             Self::SignatureError(e) => {

@@ -37,6 +37,9 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
 /// Copy of the [`frost_core::dkg::round1::SecretPackage`] struct. Necessary to implement
@@ -160,7 +163,8 @@ pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> Result<SecretPackage, IronfishFrostError> {
-    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
+    let serialized =
+        multienc::decrypt(secret, exported).map_err(IronfishFrostError::DecryptionError)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
@@ -300,11 +304,13 @@ where
     let participants = participants;
 
     if !participants.contains(&self_identity) {
-        return Err(IronfishFrostError::InvalidInput);
+        return Err(IronfishFrostError::InvalidInput(
+            "participants must include self_identity".to_string(),
+        ));
     }
 
-    let max_signers =
-        u16::try_from(participants.len()).map_err(|_| IronfishFrostError::InvalidInput)?;
+    let max_signers = u16::try_from(participants.len())
+        .map_err(|_| IronfishFrostError::InvalidInput("too many participants".to_string()))?;
 
     let (secret_package, public_package) = frost::keys::dkg::part1(
         self_identity.to_frost_identifier(),
@@ -314,7 +320,8 @@ where
     )?;
 
     let encrypted_secret_package =
-        export_secret_package(&secret_package, self_identity, &mut csrng)?;
+        export_secret_package(&secret_package, self_identity, &mut csrng)
+            .map_err(IronfishFrostError::EncryptionError)?;
 
     let group_secret_key_shard = GroupSecretKeyShard::random(&mut csrng);
 
