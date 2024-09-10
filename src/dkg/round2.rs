@@ -483,6 +483,51 @@ where
     ))
 }
 
+pub fn round2_min<R>(
+    secret: &participant::Secret,
+    participants: Vec<&[u8]>,
+    round1_secret_package: &[u8],
+    round1_frost_packages: Vec<&[u8]>,
+    mut csrng: R,
+) -> Result<(Vec<u8>, Vec<Package>), IronfishFrostError>
+where
+    R: RngCore + CryptoRng,
+{
+    let self_identity = secret.to_identity();
+    let round1_secret_package = round1::import_secret_package(round1_secret_package, secret)?;
+
+    let mut round1_packages = BTreeMap::new();
+    for i in 0..participants.len() {
+        let identity = Identity::deserialize_from(participants[i])?;
+
+        let identifier = identity.to_frost_identifier();
+
+        let round1_package = Round1Package::deserialize(round1_frost_packages[i])?;
+        round1_packages.insert(identifier, round1_package);
+    }
+
+    // Run the FROST DKG round 2
+    let (round2_secret_package, mut round2_packages) =
+        frost::keys::dkg::part2(round1_secret_package.clone(), &round1_packages)?;
+
+    // Encrypt the secret package
+    let encrypted_secret_package =
+        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
+
+    // Convert the Identifier->Package map to a Vec<Package> ordered by the
+    // Identifier's position in the 'participants' input Vec
+    let mut round2_public_packages = Vec::new();
+    for participant in participants {
+        let identity = Identity::deserialize_from(participant)?;
+        let round2_public_package = round2_packages
+            .remove(&identity.to_frost_identifier())
+            .expect("missing round 2 public package for participant");
+        round2_public_packages.push(round2_public_package);
+    }
+
+    Ok((encrypted_secret_package, round2_public_packages))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -691,6 +736,67 @@ mod tests {
             .packages_for(&identity3)
             .next()
             .expect("round 2 public packages missing package for identity3");
+    }
+
+    #[test]
+    fn round2_min() {
+        let secret = participant::Secret::random(thread_rng());
+        let identity1 = secret.to_identity();
+        let identity2 = participant::Secret::random(thread_rng()).to_identity();
+        let identity3 = participant::Secret::random(thread_rng()).to_identity();
+
+        let (round1_secret_package, _) = round1::round1(
+            &identity1,
+            2,
+            [&identity1, &identity2, &identity3],
+            thread_rng(),
+        )
+        .expect("round 1 failed");
+
+        let (_, package2) = round1::round1(
+            &identity2,
+            2,
+            [&identity1, &identity2, &identity3],
+            thread_rng(),
+        )
+        .expect("round 1 failed");
+
+        let (_, package3) = round1::round1(
+            &identity3,
+            2,
+            [&identity1, &identity2, &identity3],
+            thread_rng(),
+        )
+        .expect("round 1 failed");
+
+        let id2_ser: &[u8] = &identity2.serialize();
+        let id3_ser: &[u8] = &identity3.serialize();
+        let participants = vec![id2_ser, id3_ser];
+
+        let pkg2_ser = package2
+            .frost_package()
+            .serialize()
+            .expect("serialization failed");
+        let pkg3_ser = package3
+            .frost_package()
+            .serialize()
+            .expect("serialization failed");
+
+        let round1_frost_packages: Vec<&[u8]> = vec![&pkg2_ser[..], &pkg3_ser[..]];
+
+        let (secret_package, round2_public_packages) = super::round2_min(
+            &secret,
+            participants,
+            &round1_secret_package,
+            round1_frost_packages,
+            thread_rng(),
+        )
+        .expect("round 2 failed");
+
+        import_secret_package(&secret_package, &secret)
+            .expect("round 2 secret package import failed");
+
+        assert_eq!(round2_public_packages.len(), 2);
     }
 
     #[test]
