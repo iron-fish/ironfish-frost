@@ -145,7 +145,7 @@ where
 
         #[cfg(not(feature = "std"))]
         return Err(IronfishFrostError::InvalidInput(
-            "incorrect number of round 1 public packages",
+            "incorrect number of round 1 public packages".to_string(),
         ));
     }
 
@@ -160,7 +160,7 @@ where
 
         #[cfg(not(feature = "std"))]
         return Err(IronfishFrostError::InvalidInput(
-            "incorrect number of round 2 public packages",
+            "incorrect number of round 2 public packages".to_string(),
         ));
     }
 
@@ -196,7 +196,7 @@ where
 
             #[cfg(not(feature = "std"))]
             return Err(IronfishFrostError::InvalidInput(
-                "multiple round 1 public packages provided for an identity",
+                "multiple round 1 public packages provided for an identity".to_string(),
             ));
         }
 
@@ -238,7 +238,7 @@ where
 
             #[cfg(not(feature = "std"))]
             return Err(IronfishFrostError::InvalidInput(
-                "round 2 public package does not have the correct recipient identity",
+                "round 2 public package does not have the correct recipient identity".to_string(),
             ));
         }
 
