@@ -26,6 +26,6 @@ rand = "0.8.5"
 [features]
 default = ["signing"]
 
-std = []
+std = ["reddsa/std"]
 signing = ["dep:blake3", "dep:rand_chacha", "std"]
 dkg = []

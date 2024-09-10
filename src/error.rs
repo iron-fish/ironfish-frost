@@ -36,3 +36,41 @@ impl From<ed25519_dalek::SignatureError> for IronfishFrostError {
         IronfishFrostError::SignatureError(error)
     }
 }
+
+#[cfg(feature = "std")]
+use std::fmt;
+
+#[cfg(feature = "std")]
+impl fmt::Display for IronfishFrostError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            Self::InvalidInput => {
+                write!(f, "invalid input")?;
+                Ok(())
+            }
+            Self::StdError => {
+                write!(f, "std error")?;
+                Ok(())
+            }
+            Self::FrostError(e) => {
+                write!(f, "frost error: ")?;
+                e.fmt(f)
+            }
+            Self::IoError(e) => {
+                write!(f, "io error: ")?;
+                e.fmt(f)
+            }
+            Self::SignatureError(e) => {
+                write!(f, "signature rror: ")?;
+                e.fmt(f)
+            }
+            Self::ChecksumError(e) => {
+                write!(f, "checksum error: ")?;
+                e.fmt(f)
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for IronfishFrostError {}
