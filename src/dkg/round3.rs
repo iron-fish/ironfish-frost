@@ -32,6 +32,8 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap;
 #[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -134,12 +136,32 @@ where
     // Ensure that the number of public packages provided matches max_signers
     let expected_round1_packages = max_signers as usize;
     if round1_public_packages.len() != expected_round1_packages {
-        return Err(IronfishFrostError::InvalidInput);
+        #[cfg(feature = "std")]
+        return Err(IronfishFrostError::InvalidInput(format!(
+            "expected {} round 1 public packages, got {}",
+            expected_round1_packages,
+            round1_public_packages.len()
+        )));
+
+        #[cfg(not(feature = "std"))]
+        return Err(IronfishFrostError::InvalidInput(
+            "incorrect number of round 1 public packages".to_string(),
+        ));
     }
 
     let expected_round2_packages = expected_round1_packages.saturating_sub(1);
     if round2_public_packages.len() != expected_round2_packages {
-        return Err(IronfishFrostError::InvalidInput);
+        #[cfg(feature = "std")]
+        return Err(IronfishFrostError::InvalidInput(format!(
+            "expected {} round 2 public packages, got {}",
+            expected_round2_packages,
+            round2_public_packages.len()
+        )));
+
+        #[cfg(not(feature = "std"))]
+        return Err(IronfishFrostError::InvalidInput(
+            "incorrect number of round 2 public packages".to_string(),
+        ));
     }
 
     let expected_round1_checksum = round1::input_checksum(
@@ -166,10 +188,21 @@ where
             .insert(frost_identifier, frost_package)
             .is_some()
         {
-            return Err(IronfishFrostError::InvalidInput);
+            #[cfg(feature = "std")]
+            return Err(IronfishFrostError::InvalidInput(format!(
+                "multiple round 1 public packages provided for identity {}",
+                public_package.identity()
+            )));
+
+            #[cfg(not(feature = "std"))]
+            return Err(IronfishFrostError::InvalidInput(
+                "multiple round 1 public packages provided for an identity".to_string(),
+            ));
         }
 
-        let gsk_shard = public_package.group_secret_key_shard(secret)?;
+        let gsk_shard = public_package
+            .group_secret_key_shard(secret)
+            .map_err(IronfishFrostError::DecryptionError)?;
         gsk_shards.push(gsk_shard);
         identities.push(identity.clone());
     }
@@ -181,7 +214,9 @@ where
     // inputs
     round1_frost_packages
         .remove(&identity.to_frost_identifier())
-        .ok_or(IronfishFrostError::InvalidInput)?;
+        .ok_or(IronfishFrostError::InvalidInput(
+            "missing round 1 public package for own identity".to_string(),
+        ))?;
 
     let expected_round2_checksum =
         round2::input_checksum(round1_public_packages.iter().map(Borrow::borrow));
@@ -195,7 +230,16 @@ where
         }
 
         if !identity.eq(public_package.recipient_identity()) {
-            return Err(IronfishFrostError::InvalidInput);
+            #[cfg(feature = "std")]
+            return Err(IronfishFrostError::InvalidInput(format!(
+                "round 2 public package does not have the correct recipient identity {:?}",
+                public_package.recipient_identity().serialize()
+            )));
+
+            #[cfg(not(feature = "std"))]
+            return Err(IronfishFrostError::InvalidInput(
+                "round 2 public package does not have the correct recipient identity".to_string(),
+            ));
         }
 
         let frost_identifier = public_package.sender_identity().to_frost_identifier();
@@ -205,7 +249,16 @@ where
             .insert(frost_identifier, frost_package)
             .is_some()
         {
-            return Err(IronfishFrostError::InvalidInput);
+            #[cfg(feature = "std")]
+            return Err(IronfishFrostError::InvalidInput(format!(
+                "multiple round 2 public packages provided for identity {}",
+                public_package.sender_identity(),
+            )));
+
+            #[cfg(not(feature = "std"))]
+            return Err(IronfishFrostError::InvalidInput(
+                "multiple round 2 public packages provided for an identity".to_string(),
+            ));
         }
     }
 
@@ -334,7 +387,7 @@ mod tests {
         );
 
         match result {
-            Err(IronfishFrostError::InvalidInput) => (),
+            Err(IronfishFrostError::InvalidInput(_)) => (),
             _ => panic!("dkg round3 should have failed with InvalidInput"),
         }
     }
