@@ -27,6 +27,11 @@ use crate::alloc::borrow::ToOwned;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+#[cfg(feature = "std")]
+use chacha20poly1305::aead::Aead;
+#[cfg(feature = "std")]
+use chacha20poly1305::Error;
+
 pub const HEADER_SIZE: usize = 56;
 pub const KEY_SIZE: usize = 32;
 
@@ -272,6 +277,93 @@ impl Header {
             data_len,
         })
     }
+}
+
+#[cfg(feature = "std")]
+pub type EncryptedKey = [u8; KEY_SIZE];
+
+#[cfg(feature = "std")]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct MultiRecipientBlob<Keys, Cipher>
+where
+    Keys: AsRef<[EncryptedKey]>,
+    Cipher: AsRef<[u8]>,
+{
+    pub agreement_key: PublicKey,
+    pub encrypted_keys: Keys,
+    pub ciphertext: Cipher,
+}
+
+#[cfg(feature = "std")]
+impl MultiRecipientBlob<Vec<EncryptedKey>, Vec<u8>> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        let mut agreement_key = [0u8; 32];
+        reader.read_exact(&mut agreement_key)?;
+        let agreement_key = PublicKey::from(agreement_key);
+
+        let mut encrypted_keys_len = [0u8; 4];
+        reader.read_exact(&mut encrypted_keys_len)?;
+        let encrypted_keys_len = u32::from_le_bytes(encrypted_keys_len) as usize;
+
+        let mut encrypted_keys = Vec::with_capacity(encrypted_keys_len);
+        for _ in 0..encrypted_keys_len {
+            let mut key = EncryptedKey::default();
+            reader.read_exact(&mut key)?;
+            encrypted_keys.push(key);
+        }
+
+        let mut ciphertext_len = [0u8; 4];
+        reader.read_exact(&mut ciphertext_len)?;
+        let ciphertext_len = u32::from_le_bytes(ciphertext_len) as usize;
+
+        let mut ciphertext = vec![0u8; ciphertext_len];
+        reader.read_exact(&mut ciphertext)?;
+
+        Ok(Self {
+            agreement_key,
+            encrypted_keys,
+            ciphertext,
+        })
+    }
+}
+
+/// Decrypt data produced by a previous version of [`encrypt`] that produced a
+/// [`MultiRecipientBlob`]
+#[cfg(feature = "std")]
+pub fn decrypt_legacy<Keys, Cipher>(
+    secret: &Secret,
+    blob: &MultiRecipientBlob<Keys, Cipher>,
+) -> Result<Vec<u8>, Error>
+where
+    Keys: AsRef<[EncryptedKey]>,
+    Cipher: AsRef<[u8]>,
+{
+    let nonce = Nonce::default();
+    let shared_secret = secret
+        .decryption_key()
+        .diffie_hellman(&blob.agreement_key)
+        .to_bytes();
+
+    // Try to decrypt each encryption key one by one, and use them to attempt to decrypt the data,
+    // until the data is recovered.
+    blob.encrypted_keys
+        .as_ref()
+        .iter()
+        .filter_map(|encrypted_key| {
+            // Decrypt the encryption key with X25519 + ChaCha20. This will always succeed, even if
+            // the encryption key was not for this participant (in which case, it will result in
+            // random bytes).
+            let mut encryption_key = *encrypted_key;
+            let mut cipher = ChaCha20::new((&shared_secret).into(), &nonce);
+            cipher.apply_keystream(&mut encryption_key);
+
+            // Decrypt the data with ChaCha20Poly1305. This will fail if the encryption key was not
+            // for this participant (or if the encryption key was tampered).
+            let cipher = ChaCha20Poly1305::new((&encryption_key).into());
+            cipher.decrypt(&nonce, blob.ciphertext.as_ref()).ok()
+        })
+        .next()
+        .ok_or(Error)
 }
 
 #[cfg(test)]
