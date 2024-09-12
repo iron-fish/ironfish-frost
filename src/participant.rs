@@ -8,6 +8,7 @@ use core::cell::OnceCell;
 use core::cmp;
 use core::hash::Hash;
 use core::hash::Hasher;
+use ed25519_dalek::SecretKey;
 use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::Verifier;
@@ -76,6 +77,15 @@ impl Secret {
         Self {
             signing_key: SigningKey::generate(&mut csprng),
             decryption_key: StaticSecret::random_from_rng(&mut csprng),
+            identity: OnceCell::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn from_secret_keys(secret_key_1: &SecretKey, secret_key_2: &SecretKey) -> Self {
+        Self {
+            signing_key: SigningKey::from_bytes(secret_key_1),
+            decryption_key: StaticSecret::from(*secret_key_2),
             identity: OnceCell::new(),
         }
     }
@@ -236,8 +246,8 @@ impl Identity {
 
         let mut verification_key = [0u8; VERIFICATION_KEY_LEN];
         reader.read_exact(&mut verification_key)?;
-        let verification_key =
-            VerifyingKey::from_bytes(&verification_key).map_err(io::Error::other)?;
+        let verification_key = VerifyingKey::from_bytes(&verification_key)
+            .map_err(|_| io::Error::other("verifying key deserialization failed"))?;
 
         let mut encryption_key = [0u8; ENCRYPTION_KEY_LEN];
         reader.read_exact(&mut encryption_key)?;
@@ -247,7 +257,8 @@ impl Identity {
         reader.read_exact(&mut signature)?;
         let signature = Signature::from(signature);
 
-        Self::new(verification_key, encryption_key, signature).map_err(io::Error::other)
+        Self::new(verification_key, encryption_key, signature)
+            .map_err(|_| io::Error::other("identity deserialization failed"))
     }
 
     pub fn verify_data(&self, data: &[u8], signature: &Signature) -> Result<(), SignatureError> {
@@ -319,13 +330,25 @@ mod tests {
     use super::Identity;
     use super::Secret;
     use ed25519_dalek::Signature;
+    use ed25519_dalek::SigningKey;
     use hex_literal::hex;
     use rand::thread_rng;
+    use x25519_dalek::StaticSecret;
 
     #[test]
     fn secret_to_identity() {
         let secret = Secret::random(thread_rng());
         let id = secret.to_identity();
+        id.verify().expect("verification failed");
+    }
+
+    #[test]
+    fn from_secret_keys() {
+        let mut rng = thread_rng();
+        let secret_key_1 = SigningKey::generate(&mut rng);
+        let secret_key_2 = StaticSecret::random_from_rng(&mut rng);
+        let id = Secret::from_secret_keys(secret_key_1.as_bytes(), secret_key_2.as_bytes())
+            .to_identity();
         id.verify().expect("verification failed");
     }
 

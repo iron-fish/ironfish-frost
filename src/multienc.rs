@@ -20,6 +20,18 @@ use rand_core::RngCore;
 use x25519_dalek::PublicKey;
 use x25519_dalek::ReusableSecret;
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use crate::alloc::borrow::ToOwned;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
+#[cfg(feature = "std")]
+use chacha20poly1305::aead::Aead;
+#[cfg(feature = "std")]
+use chacha20poly1305::Error;
+
 pub const HEADER_SIZE: usize = 56;
 pub const KEY_SIZE: usize = 32;
 
@@ -29,31 +41,30 @@ pub const fn metadata_size(num_recipients: usize) -> usize {
     HEADER_SIZE + KEY_SIZE * num_recipients
 }
 
-#[cfg(feature = "std")]
-pub fn read_encrypted_blob<R>(mut reader: R) -> io::Result<Vec<u8>>
+pub fn read_encrypted_blob<R>(reader: &mut R) -> Result<Vec<u8>, io::Error>
 where
     R: io::Read,
 {
-    use std::io::Read;
-
     let mut result = Vec::new();
-    let reader = reader.by_ref();
 
-    reader.take(HEADER_SIZE as u64).read_to_end(&mut result)?;
+    let mut header_bytes = [0u8; HEADER_SIZE];
+    reader.read_exact(&mut header_bytes)?;
+    let header: Header = Header::deserialize_from(&header_bytes[..])?;
 
-    let header = Header::deserialize_from(&result[..])?;
     for _ in 0..header.num_recipients {
-        reader.take(KEY_SIZE as u64).read_to_end(&mut result)?;
+        let mut key_bytes = vec![0u8; KEY_SIZE];
+        reader.read_exact(&mut key_bytes)?;
+        result.extend(key_bytes);
     }
-    reader
-        .take(header.data_len as u64)
-        .read_to_end(&mut result)?;
+
+    let mut data_bytes = vec![0u8; header.data_len];
+    reader.read_exact(&mut data_bytes)?;
+    result.extend(data_bytes);
 
     Ok(result)
 }
 
 #[must_use]
-#[cfg(feature = "std")]
 pub fn encrypt<'a, I, R>(data: &[u8], recipients: I, csrng: R) -> Vec<u8>
 where
     I: IntoIterator<Item = &'a Identity>,
@@ -63,8 +74,8 @@ where
     let recipients = recipients.into_iter();
     let metadata_len = metadata_size(recipients.len());
     let mut result = vec![0u8; metadata_len + data.len()];
-    let (metadata, ciphertext) = result.split_at_mut(metadata_len);
 
+    let (metadata, ciphertext) = result.split_at_mut(metadata_len);
     ciphertext.copy_from_slice(data);
     encrypt_in_place(ciphertext, metadata, recipients, csrng).expect("failed to encrypt data");
 
@@ -140,7 +151,6 @@ where
 ///
 /// This method expects the ciphertext and the metadata to be concatenated in one slice. Use
 /// [`decrypt_in_place`] if you have two separate slices.
-#[cfg(feature = "std")]
 pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
     let header = Header::deserialize_from(data)?;
     let metadata_len = metadata_size(header.num_recipients);
@@ -148,7 +158,14 @@ pub fn decrypt(secret: &Secret, data: &[u8]) -> io::Result<Vec<u8>> {
         .checked_add(header.data_len)
         .ok_or_else(|| io::Error::other("overflow when calculating data size"))?;
     if data.len() < total_len {
-        return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+        #[cfg(feature = "std")]
+        {
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            return Err(io::Error);
+        }
     }
 
     let (metadata, ciphertext) = data.split_at(metadata_len);
@@ -241,7 +258,6 @@ impl Header {
         write_usize(&mut writer, self.data_len)
     }
 
-    #[cfg(feature = "std")]
     fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
         let mut agreement_key = [0u8; 32];
         reader.read_exact(&mut agreement_key)?;
@@ -263,9 +279,95 @@ impl Header {
     }
 }
 
+#[cfg(feature = "std")]
+pub type EncryptedKey = [u8; KEY_SIZE];
+
+#[cfg(feature = "std")]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct MultiRecipientBlob<Keys, Cipher>
+where
+    Keys: AsRef<[EncryptedKey]>,
+    Cipher: AsRef<[u8]>,
+{
+    pub agreement_key: PublicKey,
+    pub encrypted_keys: Keys,
+    pub ciphertext: Cipher,
+}
+
+#[cfg(feature = "std")]
+impl MultiRecipientBlob<Vec<EncryptedKey>, Vec<u8>> {
+    pub fn deserialize_from<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        let mut agreement_key = [0u8; 32];
+        reader.read_exact(&mut agreement_key)?;
+        let agreement_key = PublicKey::from(agreement_key);
+
+        let mut encrypted_keys_len = [0u8; 4];
+        reader.read_exact(&mut encrypted_keys_len)?;
+        let encrypted_keys_len = u32::from_le_bytes(encrypted_keys_len) as usize;
+
+        let mut encrypted_keys = Vec::with_capacity(encrypted_keys_len);
+        for _ in 0..encrypted_keys_len {
+            let mut key = EncryptedKey::default();
+            reader.read_exact(&mut key)?;
+            encrypted_keys.push(key);
+        }
+
+        let mut ciphertext_len = [0u8; 4];
+        reader.read_exact(&mut ciphertext_len)?;
+        let ciphertext_len = u32::from_le_bytes(ciphertext_len) as usize;
+
+        let mut ciphertext = vec![0u8; ciphertext_len];
+        reader.read_exact(&mut ciphertext)?;
+
+        Ok(Self {
+            agreement_key,
+            encrypted_keys,
+            ciphertext,
+        })
+    }
+}
+
+/// Decrypt data produced by a previous version of [`encrypt`] that produced a
+/// [`MultiRecipientBlob`]
+#[cfg(feature = "std")]
+pub fn decrypt_legacy<Keys, Cipher>(
+    secret: &Secret,
+    blob: &MultiRecipientBlob<Keys, Cipher>,
+) -> Result<Vec<u8>, Error>
+where
+    Keys: AsRef<[EncryptedKey]>,
+    Cipher: AsRef<[u8]>,
+{
+    let nonce = Nonce::default();
+    let shared_secret = secret
+        .decryption_key()
+        .diffie_hellman(&blob.agreement_key)
+        .to_bytes();
+
+    // Try to decrypt each encryption key one by one, and use them to attempt to decrypt the data,
+    // until the data is recovered.
+    blob.encrypted_keys
+        .as_ref()
+        .iter()
+        .filter_map(|encrypted_key| {
+            // Decrypt the encryption key with X25519 + ChaCha20. This will always succeed, even if
+            // the encryption key was not for this participant (in which case, it will result in
+            // random bytes).
+            let mut encryption_key = *encrypted_key;
+            let mut cipher = ChaCha20::new((&shared_secret).into(), &nonce);
+            cipher.apply_keystream(&mut encryption_key);
+
+            // Decrypt the data with ChaCha20Poly1305. This will fail if the encryption key was not
+            // for this participant (or if the encryption key was tampered).
+            let cipher = ChaCha20Poly1305::new((&encryption_key).into());
+            cipher.decrypt(&nonce, blob.ciphertext.as_ref()).ok()
+        })
+        .next()
+        .ok_or(Error)
+}
+
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "std")]
     mod detached {
         use crate::multienc::decrypt;
         use crate::multienc::encrypt;
