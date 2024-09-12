@@ -78,13 +78,6 @@ mod io {
                 Err(Error)
             }
         }
-
-        fn by_ref(&mut self) -> &mut Self
-        where
-            Self: Sized,
-        {
-            self
-        }
     }
 
     impl<R: Read> Read for &mut R {
