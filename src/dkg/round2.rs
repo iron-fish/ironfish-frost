@@ -31,7 +31,6 @@ use core::hash::Hasher;
 use core::mem;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-// use log::info;
 
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
