@@ -43,7 +43,7 @@ pub const fn metadata_size(num_recipients: usize) -> usize {
 
 pub fn read_encrypted_blob<R>(reader: &mut R) -> Result<Vec<u8>, io::Error>
 where
-    R: crate::io::Read,
+    R: io::Read,
 {
     let mut result = Vec::new();
 
