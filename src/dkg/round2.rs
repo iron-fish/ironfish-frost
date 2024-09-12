@@ -16,6 +16,7 @@ use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
+use crate::io;
 use crate::multienc;
 use crate::participant;
 use crate::participant::Identity;
@@ -25,13 +26,24 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
+use core::hash::Hasher;
+use core::mem;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::borrow::Borrow;
+// use log::info;
+
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::hash::Hasher;
-use std::io;
-use std::mem;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -153,7 +165,8 @@ pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> Result<SecretPackage, IronfishFrostError> {
-    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
+    let serialized =
+        multienc::decrypt(secret, exported).map_err(IronfishFrostError::DecryptionError)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
@@ -367,7 +380,17 @@ where
 
     // Ensure that the number of public packages provided matches max_signers
     if round1_public_packages.len() != max_signers as usize {
-        return Err(IronfishFrostError::InvalidInput);
+        #[cfg(feature = "std")]
+        return Err(IronfishFrostError::InvalidInput(format!(
+            "expected {} public packages, got {}",
+            max_signers,
+            round1_public_packages.len()
+        )));
+
+        #[cfg(not(feature = "std"))]
+        return Err(IronfishFrostError::InvalidInput(
+            "incorrect number of round 1 public packages".to_string(),
+        ));
     }
 
     let expected_round1_checksum = round1::input_checksum(
@@ -392,7 +415,16 @@ where
             .insert(frost_identifier, frost_package)
             .is_some()
         {
-            return Err(IronfishFrostError::InvalidInput);
+            #[cfg(feature = "std")]
+            return Err(IronfishFrostError::InvalidInput(format!(
+                "multiple public packages provided for identity {}",
+                public_package.identity()
+            )));
+
+            #[cfg(not(feature = "std"))]
+            return Err(IronfishFrostError::InvalidInput(
+                "multiple public packages provided for an identity".to_string(),
+            ));
         }
 
         identities.insert(frost_identifier, identity);
@@ -418,7 +450,8 @@ where
 
     // Encrypt the secret package
     let encrypted_secret_package =
-        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
+        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)
+            .map_err(IronfishFrostError::EncryptionError)?;
 
     // Convert the Identifier->Package map to an Identity->PublicPackage map
     let mut round2_public_packages = Vec::new();
@@ -680,7 +713,7 @@ mod tests {
         );
 
         match result {
-            Err(IronfishFrostError::InvalidInput) => (),
+            Err(IronfishFrostError::InvalidInput(_)) => (),
             _ => panic!("dkg round2 should have failed with InvalidInput"),
         }
     }
@@ -708,7 +741,7 @@ mod tests {
 
         // We can use `assert_matches` once it's stabilized
         match result {
-            Err(IronfishFrostError::InvalidInput) => (),
+            Err(IronfishFrostError::InvalidInput(_)) => (),
             _ => panic!("dkg round2 should have failed with InvalidInput"),
         }
     }

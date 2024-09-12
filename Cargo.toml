@@ -12,20 +12,20 @@ repository = "https://github.com/iron-fish/ironfish-frost"
 blake3 = { version = "1.5.0", optional = true }
 chacha20 = "0.9.1"
 chacha20poly1305 = "0.10.1"
-ed25519-dalek = { version = "2.1.0", features = ["rand_core"] }
+ed25519-dalek = { version = "2.1.0", default-features = false, features = ["rand_core", "alloc"] }
 rand_chacha = { version = "0.3.1", optional = true }
-rand_core = "0.6.4"
-reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev = "b9c3107e6ec5333a89a7fa064f2d10f749a90cce", features = ["frost", "frost-rerandomized"] }
-siphasher = { version = "1.0.0", optional = true }
-x25519-dalek = { version = "2.0.0", features = ["reusable_secrets", "static_secrets"] }
+rand_core = { version = "0.6.4", default-features = false, features = ["alloc"] }
+reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev="9ac52c5c60e454b0032d78a22c05fb79aae1d51e", features = ["frost"], default-features = false }
+siphasher = { version = "1.0.0", default-features = false }
+x25519-dalek = { version = "2.0.0", default-features = false, features = ["reusable_secrets", "static_secrets"] }
 
 [dev-dependencies]
 hex-literal = "0.4.1"
 rand = "0.8.5"
 
 [features]
-default = ["std", "signing"]
+default = ["dkg", "std"]
 
-std = []
-signing = ["dep:blake3", "dep:rand_chacha", "dep:siphasher", "std"]
-dkg = ["std", "signing"]
+std = ["reddsa/std"]
+signing = ["dep:blake3", "dep:rand_chacha", "std"]
+dkg = []

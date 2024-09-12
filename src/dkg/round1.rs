@@ -14,6 +14,7 @@ use crate::frost::keys::VerifiableSecretSharingCommitment;
 use crate::frost::Field;
 use crate::frost::Identifier;
 use crate::frost::JubjubScalarField;
+use crate::io;
 use crate::multienc;
 use crate::participant;
 use crate::participant::Identity;
@@ -23,12 +24,21 @@ use crate::serde::read_variable_length_bytes;
 use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
+use core::borrow::Borrow;
 use rand_core::CryptoRng;
 use rand_core::RngCore;
-use std::borrow::Borrow;
-use std::hash::Hasher;
-use std::io;
-use std::mem;
+
+use core::hash::Hasher;
+use core::mem;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
 
 type Scalar = <JubjubScalarField as Field>::Scalar;
 
@@ -153,7 +163,8 @@ pub fn import_secret_package(
     exported: &[u8],
     secret: &participant::Secret,
 ) -> Result<SecretPackage, IronfishFrostError> {
-    let serialized = multienc::decrypt(secret, exported).map_err(io::Error::other)?;
+    let serialized =
+        multienc::decrypt(secret, exported).map_err(IronfishFrostError::DecryptionError)?;
     SerializableSecretPackage::deserialize_from(&serialized[..]).map(|pkg| pkg.into())
 }
 
@@ -293,11 +304,13 @@ where
     let participants = participants;
 
     if !participants.contains(&self_identity) {
-        return Err(IronfishFrostError::InvalidInput);
+        return Err(IronfishFrostError::InvalidInput(
+            "participants must include self_identity".to_string(),
+        ));
     }
 
-    let max_signers =
-        u16::try_from(participants.len()).map_err(|_| IronfishFrostError::InvalidInput)?;
+    let max_signers = u16::try_from(participants.len())
+        .map_err(|_| IronfishFrostError::InvalidInput("too many participants".to_string()))?;
 
     let (secret_package, public_package) = frost::keys::dkg::part1(
         self_identity.to_frost_identifier(),
@@ -307,7 +320,8 @@ where
     )?;
 
     let encrypted_secret_package =
-        export_secret_package(&secret_package, self_identity, &mut csrng)?;
+        export_secret_package(&secret_package, self_identity, &mut csrng)
+            .map_err(IronfishFrostError::EncryptionError)?;
 
     let group_secret_key_shard = GroupSecretKeyShard::random(&mut csrng);
 

@@ -7,17 +7,22 @@ use reddsa::frost::redjubjub::JubjubBlake2b512;
 
 use crate::io;
 
-#[cfg(feature = "signing")]
 use crate::checksum::ChecksumError;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
 
 #[derive(Debug)]
 pub enum IronfishFrostError {
-    InvalidInput,
+    InvalidInput(String),
     StdError,
     IoError(io::Error),
+    DecryptionError(io::Error),
+    EncryptionError(io::Error),
     FrostError(FrostError<JubjubBlake2b512>),
     SignatureError(ed25519_dalek::SignatureError),
-    #[cfg(feature = "signing")]
     ChecksumError(ChecksumError),
 }
 
@@ -38,3 +43,49 @@ impl From<ed25519_dalek::SignatureError> for IronfishFrostError {
         IronfishFrostError::SignatureError(error)
     }
 }
+
+#[cfg(feature = "std")]
+use std::fmt;
+
+#[cfg(feature = "std")]
+impl fmt::Display for IronfishFrostError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            Self::InvalidInput(e) => {
+                write!(f, "invalid input: ")?;
+                e.fmt(f)
+            }
+            Self::StdError => {
+                write!(f, "std error")?;
+                Ok(())
+            }
+            Self::IoError(e) => {
+                write!(f, "io error: ")?;
+                e.fmt(f)
+            }
+            Self::DecryptionError(e) => {
+                write!(f, "decryption error: ")?;
+                e.fmt(f)
+            }
+            Self::EncryptionError(e) => {
+                write!(f, "encryption error: ")?;
+                e.fmt(f)
+            }
+            Self::FrostError(e) => {
+                write!(f, "frost error: ")?;
+                e.fmt(f)
+            }
+            Self::SignatureError(e) => {
+                write!(f, "signature rror: ")?;
+                e.fmt(f)
+            }
+            Self::ChecksumError(e) => {
+                write!(f, "checksum error: ")?;
+                e.fmt(f)
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for IronfishFrostError {}
