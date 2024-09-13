@@ -305,7 +305,7 @@ impl MultiRecipientBlob<Vec<EncryptedKey>, Vec<u8>> {
         reader.read_exact(&mut encrypted_keys_len)?;
         let encrypted_keys_len = u32::from_le_bytes(encrypted_keys_len) as usize;
 
-        let mut encrypted_keys = Vec::with_capacity(encrypted_keys_len);
+        let mut encrypted_keys = Vec::new();
         for _ in 0..encrypted_keys_len {
             let mut key = EncryptedKey::default();
             reader.read_exact(&mut key)?;
