@@ -9,11 +9,11 @@ homepage = "https://ironfish.network/"
 repository = "https://github.com/iron-fish/ironfish-frost"
 
 [dependencies]
-blake3 = { version = "1.5.0", optional = true }
+blake3 = { version = "1.5.0", optional = true, default-features = false }
 chacha20 = "0.9.1"
 chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.1.0", default-features = false, features = ["rand_core", "alloc"] }
-rand_chacha = { version = "0.3.1", optional = true }
+rand_chacha = { version = "0.3.1", optional = true, default-features = false }
 rand_core = { version = "0.6.4", default-features = false, features = ["alloc"] }
 reddsa = { git = "https://github.com/ZcashFoundation/reddsa.git", rev="ed49e9ca0699a6450f6d4a9fe62ff168f5ea1ead", features = ["frost"], default-features = false }
 siphasher = { version = "1.0.0", default-features = false }
@@ -24,8 +24,8 @@ hex-literal = "0.4.1"
 rand = "0.8.5"
 
 [features]
-default = ["dkg", "signing"]
+default = ["dkg", "signing", "std"]
 
 std = ["reddsa/std"]
-signing = ["dep:blake3", "dep:rand_chacha", "std"]
+signing = ["dep:blake3", "dep:rand_chacha"]
 dkg = []
