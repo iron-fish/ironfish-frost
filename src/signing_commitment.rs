@@ -15,9 +15,15 @@ use crate::participant::Identity;
 use crate::participant::Secret;
 use crate::participant::Signature;
 use crate::participant::IDENTITY_LEN;
-use std::borrow::Borrow;
-use std::hash::Hasher;
-use std::io;
+use core::borrow::Borrow;
+use core::hash::Hasher;
+use crate::io;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 const NONCE_COMMITMENT_LEN: usize = 32;
 pub const AUTHENTICATED_DATA_LEN: usize = IDENTITY_LEN + NONCE_COMMITMENT_LEN * 2 + CHECKSUM_LEN;

@@ -8,7 +8,18 @@ use crate::participant::Identity;
 use crate::participant::IdentitySerialization;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
+
+#[cfg(feature = "std")]
 use std::borrow::Borrow;
+
+#[cfg(not(feature = "std"))]
+use core::borrow::Borrow;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 type ParticipantCount = u32;
 
