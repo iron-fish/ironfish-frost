@@ -147,16 +147,16 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
     csrng: R,
-) -> io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, IronfishFrostError> {
     let serializable = SerializableSecretPackage::from(pkg.clone());
     if serializable.identifier != identity.to_frost_identifier() {
-        return Err(io::Error::other("identity mismatch"));
+        return Err(IronfishFrostError::InvalidInput(
+            "identity mismatch".to_string(),
+        ));
     }
 
     let mut serialized = Vec::new();
-    serializable
-        .serialize_into(&mut serialized)
-        .expect("serialization failed");
+    serializable.serialize_into(&mut serialized)?;
     Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
 
@@ -441,14 +441,21 @@ where
     }
 
     // Sanity check
-    assert_eq!(round1_public_packages.len(), identities.len());
-    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
+    if round1_public_packages.len() != identities.len()
+        || round1_public_packages.len() != round1_frost_packages.len()
+    {
+        return Err(IronfishFrostError::InvalidInput(
+            "incorrect number of packages or identities provided".to_string(),
+        ));
+    }
 
     // The public package for `self_identity` must be excluded from `frost::keys::dkg::part2`
     // inputs
     round1_frost_packages
         .remove(&self_identity.to_frost_identifier())
-        .expect("missing public package for self_identity");
+        .ok_or(IronfishFrostError::InvalidInput(
+            "missing public package for self_identity".to_string(),
+        ))?;
 
     // Run the FROST DKG round 2
     let (round2_secret_package, round2_packages) =
@@ -456,15 +463,16 @@ where
 
     // Encrypt the secret package
     let encrypted_secret_package =
-        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)
-            .map_err(IronfishFrostError::EncryptionError)?;
+        export_secret_package(&round2_secret_package, &self_identity, &mut csrng)?;
 
     // Convert the Identifier->Package map to an Identity->PublicPackage map
     let mut round2_public_packages = Vec::new();
     for (identifier, package) in round2_packages {
         let identity = *identities
             .get(&identifier)
-            .expect("round2 generated package for unknown identifier");
+            .ok_or(IronfishFrostError::InvalidInput(
+                "round2 generated package for unknown identifier".to_string(),
+            ))?;
 
         let public_package = PublicPackage::new(
             self_identity.clone(),
@@ -520,7 +528,9 @@ where
         let identity = Identity::deserialize_from(participant)?;
         let round2_public_package = round2_packages
             .remove(&identity.to_frost_identifier())
-            .expect("missing round 2 public package for participant");
+            .ok_or(IronfishFrostError::InvalidInput(
+                "missing round 2 public package for particiant".to_string(),
+            ))?;
         round2_public_packages.push(round2_public_package);
     }
 
