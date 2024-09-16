@@ -146,16 +146,16 @@ pub fn export_secret_package<R: RngCore + CryptoRng>(
     pkg: &SecretPackage,
     identity: &Identity,
     csrng: R,
-) -> io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, IronfishFrostError> {
     let serializable = <&SerializableSecretPackage>::from(pkg);
     if serializable.identifier != identity.to_frost_identifier() {
-        return Err(io::Error::other("identity mismatch"));
+        return Err(IronfishFrostError::InvalidInput(
+            "identity mismatch".to_string(),
+        ));
     }
 
     let mut serialized = Vec::new();
-    serializable
-        .serialize_into(&mut serialized)
-        .expect("serialization failed");
+    serializable.serialize_into(&mut serialized)?;
     Ok(multienc::encrypt(&serialized, [identity], csrng))
 }
 
@@ -267,7 +267,7 @@ impl PublicPackage {
     }
 
     pub fn deserialize_from<R: io::Read>(mut reader: R) -> Result<Self, IronfishFrostError> {
-        let identity = Identity::deserialize_from(&mut reader).expect("reading identity failed");
+        let identity = Identity::deserialize_from(&mut reader)?;
 
         let frost_package = read_variable_length_bytes(&mut reader)?;
         let frost_package = Package::deserialize(&frost_package)?;
@@ -320,8 +320,7 @@ where
     )?;
 
     let encrypted_secret_package =
-        export_secret_package(&secret_package, self_identity, &mut csrng)
-            .map_err(IronfishFrostError::EncryptionError)?;
+        export_secret_package(&secret_package, self_identity, &mut csrng)?;
 
     let group_secret_key_shard = GroupSecretKeyShard::random(&mut csrng);
 
