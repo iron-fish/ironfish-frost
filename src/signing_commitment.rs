@@ -10,6 +10,7 @@ use crate::error::IronfishFrostError;
 use crate::frost::keys::SigningShare;
 use crate::frost::round1::NonceCommitment;
 use crate::frost::round1::SigningCommitments;
+use crate::io;
 use crate::nonces::deterministic_signing_nonces;
 use crate::participant::Identity;
 use crate::participant::Secret;
@@ -17,7 +18,6 @@ use crate::participant::Signature;
 use crate::participant::IDENTITY_LEN;
 use core::borrow::Borrow;
 use core::hash::Hasher;
-use crate::io;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
