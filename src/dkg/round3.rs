@@ -210,7 +210,11 @@ where
     }
 
     // Sanity check
-    assert_eq!(round1_public_packages.len(), round1_frost_packages.len());
+    if round1_public_packages.len() != round1_frost_packages.len() {
+        return Err(IronfishFrostError::InvalidInput(
+            "incorrect number of round 1 packages provided".to_string(),
+        ));
+    }
 
     // The public package for `identity` must be excluded from `frost::keys::dkg::part3`
     // inputs
@@ -264,7 +268,11 @@ where
         }
     }
 
-    assert_eq!(round2_public_packages.len(), round2_frost_packages.len());
+    if round2_public_packages.len() != round2_frost_packages.len() {
+        return Err(IronfishFrostError::InvalidInput(
+            "incorrect number of round 2 packages provided".to_string(),
+        ));
+    }
 
     let (key_package, public_key_package) = part3(
         &round2_secret_package,
