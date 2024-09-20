@@ -29,3 +29,7 @@ default = ["dkg", "signing", "std"]
 std = ["reddsa/std"]
 signing = ["dep:blake3", "dep:rand_chacha"]
 dkg = []
+
+
+[patch.crates-io]
+postcard = { git = "https://github.com/iron-fish/postcard", branch = "v080" }
