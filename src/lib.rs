@@ -27,7 +27,7 @@ pub mod signature_share;
 #[cfg(feature = "signing")]
 pub mod signing_commitment;
 
-pub use reddsa::frost::redjubjub as frost;
+pub use ironfish_reddsa::frost::redjubjub as frost;
 
 #[cfg(feature = "std")]
 mod io {

@@ -4,7 +4,7 @@
 
 use crate::io;
 
-use reddsa::frost::redjubjub::round2::SignatureShare as FrostSignatureShare;
+use ironfish_reddsa::frost::redjubjub::round2::SignatureShare as FrostSignatureShare;
 
 use crate::{
     error::IronfishFrostError,

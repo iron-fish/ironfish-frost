@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use reddsa::frost::redjubjub::frost::Error as FrostError;
-use reddsa::frost::redjubjub::JubjubBlake2b512;
+use ironfish_reddsa::frost::redjubjub::frost::Error as FrostError;
+use ironfish_reddsa::frost::redjubjub::JubjubBlake2b512;
 
 use crate::io;
 

@@ -22,9 +22,9 @@ use crate::serde::write_u16;
 use crate::serde::write_variable_length;
 use crate::serde::write_variable_length_bytes;
 use core::borrow::Borrow;
-use reddsa::frost::redjubjub::keys::dkg::round1::Package as Round1Package;
-use reddsa::frost::redjubjub::keys::dkg::round2::Package as Round2Package;
-use reddsa::frost::redjubjub::VerifyingKey;
+use ironfish_reddsa::frost::redjubjub::keys::dkg::round1::Package as Round1Package;
+use ironfish_reddsa::frost::redjubjub::keys::dkg::round2::Package as Round2Package;
+use ironfish_reddsa::frost::redjubjub::VerifyingKey;
 
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
@@ -342,10 +342,10 @@ mod tests {
     extern crate alloc;
     use alloc::vec::Vec;
     use hex_literal::hex;
+    use ironfish_reddsa::frost::redjubjub::keys::split;
+    use ironfish_reddsa::frost::redjubjub::SigningKey;
+    use ironfish_reddsa::frost::redpallas::frost::keys::IdentifierList;
     use rand::thread_rng;
-    use reddsa::frost::redjubjub::keys::split;
-    use reddsa::frost::redjubjub::SigningKey;
-    use reddsa::frost::redpallas::frost::keys::IdentifierList;
 
     #[test]
     fn public_pkg_serialization_roundtrip() {
